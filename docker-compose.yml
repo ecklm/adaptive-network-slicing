@@ -1,0 +1,14 @@
+version: '3'
+
+networks:
+  controller_net:
+    driver: bridge
+
+services:
+  controller:
+    image: osrg/ryu
+    command: ryu-manager --ofp-tcp-listen-port 6653 ryu.app.simple_switch --verbose
+    ports:
+            - 6653:6653
+    networks:
+            - controller_net

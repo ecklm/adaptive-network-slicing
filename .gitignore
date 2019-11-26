@@ -1,0 +1,4 @@
+._sync_*
+.venv/
+.idea/
+__pycache__/
