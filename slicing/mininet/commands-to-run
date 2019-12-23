@@ -1,8 +1,3 @@
-# s1
-
-ovs-vsctl set Bridge s1 protocols=OpenFlow13
-ovs-vsctl set-manager ptcp:6632
-
 # h1(1)
 
 iperf -s -u -i 1 -p 5001
