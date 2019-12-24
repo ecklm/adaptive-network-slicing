@@ -6,10 +6,18 @@ iperf -s -u -i 1 -p 5001
 
 iperf -s -u -i 1 -p 5002
 
+# h1(3)
+
+iperf -s -u -i 1 -p 5003
+
 # h2(1)
 
-iperf -c 10.0.0.1 -p 5001 -u -b 1M
+iperf -c 10.0.0.1 -u -b 30M -t 3600 -p 5001
 
 # h2(2)
 
-iperf -c 10.0.0.1 -p 5002 -u -b 1M
+iperf -c 10.0.0.1 -u -b 30M -t 3600 -p 5002
+
+# h2(3)
+
+iperf -c 10.0.0.1 -u -b 30M -t 3600 -p 5003

@@ -8,11 +8,8 @@ class SlicingTopo(Topo):
     Designed to be a specific base for the experiment.
     """
 
-    def __init__( self ):
+    def build(self, *args, **params):
         "Create custom topo."
-
-        # Initialize topology
-        Topo.__init__( self )
 
         # Add hosts and switches
         h1 = self.addHost( 'h1' )
