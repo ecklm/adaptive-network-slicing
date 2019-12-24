@@ -35,29 +35,32 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
     def _request_stats(self, datapath):
         self.logger.debug('send stats request: %016x', datapath.id)
-        ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
 
         req = parser.OFPFlowStatsRequest(datapath)
         datapath.send_msg(req)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
-    def _flow_stats_reply_handler(self, ev):
+    def _flow_stats_reply_logger(self, ev):
         body = ev.msg.body
 
-        self.logger.info("")
-        self.logger.info('datapath         '
-                         'ipv4-dst   udp-dst '
-                         'queue-id packets  bytes')
-        self.logger.info('---------------- '
-                         '---------- ------- '
-                         '-------- ------- --------')
-
-        for stat in sorted([flow for flow in body if flow.priority == 1 and flow.table_id == 0],
-                           key=lambda flow: (flow.match['ipv4_dst'],
-                                             flow.match['udp_dst'])):
-            self.logger.info('%016x %10s %7d %8d %7d %8d',
+        flowstats = sorted([flow for flow in body if flow.priority == 1 and flow.table_id == 0],
+                           key=lambda flow: (flow.match['ipv4_dst'], flow.match['udp_dst']))
+        if len(flowstats) > 0:
+            self.logger.info("")
+            self.logger.info('datapath         '
+                             'ipv4-dst   udp-dst '
+                             'queue-id packets  bytes')
+            self.logger.info('---------------- '
+                             '---------- ------- '
+                             '-------- -------- -----------')
+        for stat in flowstats:
+            self.logger.info('%016x %10s %7d %8d %8d %11d',
                              ev.msg.datapath.id,
                              stat.match['ipv4_dst'], stat.match['udp_dst'],
                              stat.instructions[0].actions[0].queue_id,
                              stat.packet_count, stat.byte_count)
+
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def _flow_stats_reply_handler(self, ev):
+        body = ev.msg.body
