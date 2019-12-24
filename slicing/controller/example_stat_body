@@ -1,0 +1,40 @@
+[
+	OFPFlowStats(byte_count=0,cookie=2,duration_nsec=474000000,duration_sec=406,flags=0,hard_timeout=0,idle_timeout=0,
+		instructions=[OFPInstructionActions(actions=[OFPActionSetQueue(len=8,queue_id=2,type=21)],len=16,type=4), OFPInstructionGotoTable(len=8,table_id=1,type=1)],
+		length=104,
+		match=OFPMatch(oxm_fields={'eth_type': 2048, 'ipv4_dst': '10.0.0.1', 'ip_proto': 17, 'udp_dst': 5003}),packet_count=0,priority=1,table_id=0),
+
+	OFPFlowStats(byte_count=0,cookie=1,duration_nsec=535000000,duration_sec=406,flags=0,hard_timeout=0,idle_timeout=0,
+		instructions=[OFPInstructionActions(actions=[OFPActionSetQueue(len=8,queue_id=1,type=21)],len=16,type=4), OFPInstructionGotoTable(len=8,table_id=1,type=1)],
+		length=104,
+		match=OFPMatch(oxm_fields={'eth_type': 2048, 'ipv4_dst': '10.0.0.1', 'ip_proto': 17, 'udp_dst': 5002}),packet_count=0,priority=1,table_id=0),
+
+	OFPFlowStats(byte_count=0,cookie=1,duration_nsec=728000000,duration_sec=377,flags=0,hard_timeout=0,idle_timeout=0,
+		instructions=[OFPInstructionActions(actions=[OFPActionSetQueue(len=8,queue_id=0,type=21)],len=16,type=4),OFPInstructionGotoTable(len=8,table_id=1,type=1)],
+		length=104,
+		match=OFPMatch(oxm_fields={'eth_type': 2048, 'ipv4_dst': '10.0.0.1', 'ip_proto': 17, 'udp_dst': 5001}),packet_count=0,priority=1,table_id=0),
+
+	OFPFlowStats(byte_count=100632,cookie=0,duration_nsec=467000000,duration_sec=9,flags=0,hard_timeout=0,idle_timeout=0,
+		instructions=[OFPInstructionGotoTable(len=8,table_id=1,type=1)],
+		length=64,
+		match=OFPMatch(oxm_fields={}),packet_count=1044,priority=0,table_id=0),
+
+	OFPFlowStats(byte_count=50176,cookie=0,duration_nsec=608000000,duration_sec=519,flags=0,hard_timeout=0,idle_timeout=0,
+		instructions=[OFPInstructionActions(actions=[OFPActionOutput(len=16,max_len=65509,port=2,type=0)],len=24,type=4)],
+		length=104,
+		match=OFPMatch(oxm_fields={'in_port': 1, 'eth_src': '00:00:00:00:00:01', 'eth_dst': '00:00:00:00:00:02'}),packet_count=520,priority=1,table_id=1),
+
+	OFPFlowStats(byte_count=50274,cookie=0,duration_nsec=615000000,duration_sec=519,flags=0,hard_timeout=0,idle_timeout=0,
+		instructions=[OFPInstructionActions(actions=[OFPActionOutput(len=16,max_len=65509,port=1,type=0)],len=24,type=4)],
+		length=104,
+		match=OFPMatch(oxm_fields={'in_port': 2, 'eth_src': '00:00:00:00:00:02', 'eth_dst': '00:00:00:00:00:01'}),packet_count=521,priority=1,table_id=1),
+
+	OFPFlowStats(byte_count=182,cookie=0,duration_nsec=470000000,duration_sec=9,flags=0,hard_timeout=0,idle_timeout=0,
+		instructions=[OFPInstructionActions(actions=[OFPActionOutput(len=16,max_len=65535,port=4294967293,type=0)],len=24,type=4)],
+		length=80,
+		match=OFPMatch(oxm_fields={}),packet_count=3,priority=0,table_id=1)
+]
+
+
+
+
