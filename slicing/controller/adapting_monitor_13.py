@@ -89,10 +89,10 @@ class AdaptingMonitor13(app_manager.RyuApp):
         body = ev.msg.body
         flowstats = sorted([flow for flow in body if flow.priority == 1 and flow.table_id == 0],
                            key=lambda flow: (flow.match['ipv4_dst'], flow.match['udp_dst']))
+        dpid = ev.msg.datapath.id
         for stat in flowstats:
             # WARNING: stat.byte_count is the number of bytes that MATCHED the rule, not the number of bytes
             # that have finally been transmitted. This is not a problem for us, but it is important to know
-            dpid = ev.msg.datapath.id
             flow = FlowId(stat.match['ipv4_dst'], stat.match['udp_dst'])
             self.stats[dpid].put(flow, stat.byte_count)
 
@@ -110,6 +110,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
                     avg_speed * 8 / 1000000
                 )
             )
+        self.qos_managers[dpid].adapt_queues(self.stats[dpid].export_avg_speeds_bps())
 
 
 class QoSManager:
@@ -153,6 +154,16 @@ class QoSManager:
         """
         r = requests.get("http://localhost:8080/qos/queue/%016d" % self.__datapath)
         self.log_rest_result(r)
+
+    def adapt_queues(self, flowstats: Dict[FlowId, float]):
+        modified = False
+        for k in flowstats:
+            if self.flows_limits[k][0] > flowstats[k] and flowstats[k] > 0:
+                self.flows_limits[k] = (int(flowstats[k]), self.flows_limits[k][1])
+                self.__logger.info("Flow limit for flow '{}' updated to {}bps".format(k, flowstats[k]))
+                modified = True
+        if modified:
+            self.set_queues()
 
     def set_rules(self):
         for k in self.flows_limits:
@@ -272,3 +283,9 @@ class FlowStatManager:
         :return: The result of `FlowStat.get_avg_bps` for the given flow
         """
         return self.stats[flow].get_avg_speed_bps(prefix)
+
+    def export_avg_speeds(self, prefix: str = None) -> Dict[FlowId, float]:
+        return {k: v.get_avg_speed(prefix) for (k, v) in self.stats.items()}
+
+    def export_avg_speeds_bps(self, prefix: str = None) -> Dict[FlowId, float]:
+        return {k: v.get_avg_speed_bps(prefix) for (k, v) in self.stats.items()}
