@@ -1,4 +1,4 @@
-from typing import Tuple, Dict, Any
+from typing import Dict
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -82,12 +82,13 @@ class AdaptingMonitor13(app_manager.RyuApp):
             # WARNING: stat.byte_count is the number of bytes that MATCHED the rule, not the number of bytes
             # that have finally been transmitted. This is not a problem for us, but it is important to know
             dpid = ev.msg.datapath.id
-            self.stats[dpid].put(stat.match['ipv4_dst'], stat.match['udp_dst'], stat.byte_count)
+            flow = FlowId(stat.match['ipv4_dst'], stat.match['udp_dst'])
+            self.stats[dpid].put(flow, stat.byte_count)
 
             # Log the stats
             self.logger.info("")
-            avg = self.stats[dpid].get_avg(stat.match['ipv4_dst'], stat.match['udp_dst'])
-            avg_speed = self.stats[dpid].get_avg_speed(stat.match['ipv4_dst'], stat.match['udp_dst'])
+            avg = self.stats[dpid].get_avg(flow)
+            avg_speed = self.stats[dpid].get_avg_speed(flow)
             self.logger.info(
                 "avg (B): {}\n\tavg_speed (B/s): {}\n\tavg_speed (b/s): {}\n\t"
                 "avg_speed (Kb/s): {}\n\tavg_speed (Mb/s): {}".format(
@@ -98,6 +99,12 @@ class AdaptingMonitor13(app_manager.RyuApp):
                     avg_speed * 8 / 1000000
                 )
             )
+
+
+@dataclass(frozen=True)
+class FlowId:
+    ipv4_dst: str
+    udp_dst: int
 
 
 class QoSManager:
@@ -220,41 +227,39 @@ class FlowStat:
 
 class FlowStatManager:
     def __init__(self, time_step):
-        self.stats: Dict[Tuple[str, int], FlowStat] = {}
+        self.stats: Dict[FlowId, FlowStat] = {}
         self.time_step = time_step
 
-    def put(self, ipv4_dst: str, udp_dst: int, val: int) -> None:
+    def put(self, flow: FlowId, val: int) -> None:
         """
         Adds a new record to the specified flow's stats
 
-        :param ipv4_dst: IPv4 destination address
-        :param udp_dst: UDP destination port
+        :param flow: The identifier of the Flow
         :param val: The measurement value
         """
-        key = (ipv4_dst, udp_dst)
         try:
-            self.stats[key].put(val)
+            self.stats[flow].put(val)
         except KeyError:
-            self.stats[key] = FlowStat(self.time_step)
-            self.stats[key].put(val)
+            self.stats[flow] = FlowStat(self.time_step)
+            self.stats[flow].put(val)
 
-    def get_avg(self, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
+    def get_avg(self, flow: FlowId, prefix: str = None) -> float:
         """
         :param prefix: See `FlowStat.get_avg` parameter documentation
         :return: The result of `FlowStat.get_avg` for the given flow
         """
-        return self.stats[(ipv4_dst, upd_dst)].get_avg(prefix)  # Let the KeyError exception arise if any
+        return self.stats[flow].get_avg(prefix)  # Let the KeyError exception arise if any
 
-    def get_avg_speed(self, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
+    def get_avg_speed(self, flow: FlowId, prefix: str = None) -> float:
         """
         :param prefix: See `FlowStat.get_avg` parameter documentation
         :return: The result of `FlowStat.get_avg_speed` for the given flow
         """
-        return self.stats[(ipv4_dst, upd_dst)].get_avg_speed(prefix)
+        return self.stats[flow].get_avg_speed(prefix)
 
-    def get_avg_speed_bps(self, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
+    def get_avg_speed_bps(self, flow: FlowId, prefix: str = None) -> float:
         """
         :param prefix: See `FlowStat.get_avg` parameter documentation
         :return: The result of `FlowStat.get_avg_bps` for the given flow
         """
-        return self.stats[(ipv4_dst, upd_dst)].get_avg_speed_bps(prefix)
+        return self.stats[flow].get_avg_speed_bps(prefix)
