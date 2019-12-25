@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Tuple
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -11,9 +11,20 @@ import json
 from dataclasses import dataclass
 
 
+@dataclass(frozen=True)
+class FlowId:
+    ipv4_dst: str
+    udp_dst: int
+
+
 class AdaptingMonitor13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     time_step = 5  # The number of seconds between two stat request
+    flows_limits = {
+        FlowId('10.0.0.1', 5001): 5 * 10 ** 6,
+        FlowId('10.0.0.1', 5002): 15 * 10 ** 6,
+        FlowId('10.0.0.1', 5003): 25 * 10 ** 6
+    }
 
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
@@ -30,7 +41,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
             if datapath.id not in self.datapaths:
                 self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
-                self.qos_managers[datapath.id] = QoSManager(datapath.id, self.logger)
+                self.qos_managers[datapath.id] = QoSManager(datapath.id, AdaptingMonitor13.flows_limits, self.logger)
                 self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.time_step)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
@@ -101,20 +112,14 @@ class AdaptingMonitor13(app_manager.RyuApp):
             )
 
 
-@dataclass(frozen=True)
-class FlowId:
-    ipv4_dst: str
-    udp_dst: int
-
-
 class QoSManager:
-    queue_setting = {"port_name": "s1-eth1", "type": "linux-htb", "max_rate": "50000000",
-                     "queues":
-                         [{"max_rate": "5000000"}, {"max_rate": "15000000"}, {"max_rate": "25000000"}]
-                     }
-
-    def __init__(self, datapath: int, logger):
+    def __init__(self, datapath: int, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
+        self.flows_limits: Dict[FlowId, Tuple[int, int]] = flows_with_init_limits
+        qnum = 0
+        for k in self.flows_limits:
+            self.flows_limits[k] = (self.flows_limits[k], qnum)
+            qnum += 1
         self.__logger = logger
         self.__set_ovsdb_addr()
         self.set_rules()
@@ -132,8 +137,12 @@ class QoSManager:
 
     def set_queues(self):
         r = requests.post("http://localhost:8080/qos/queue/%016d" % self.__datapath,
-                          data=json.dumps(QoSManager.queue_setting),
-                          headers={'Content-Type': 'application/json'})
+                          headers={'Content-Type': 'application/json'},
+                          data=json.dumps({
+                              "port_name": "s1-eth1", "type": "linux-htb", "max_rate": "50000000",
+                              "queues":
+                                  [{"max_rate": str(self.flows_limits[k][0])} for k in self.flows_limits]
+                          }))
         self.log_rest_result(r)
 
     def get_queues(self):
@@ -146,16 +155,16 @@ class QoSManager:
         self.log_rest_result(r)
 
     def set_rules(self):
-        for dport, queue in [(5001, 0), (5002, 1), (5003, 2)]:
+        for k in self.flows_limits:
             r = requests.post("http://localhost:8080/qos/rules/%016d" % self.__datapath,
                               headers={'Content-Type': 'application/json'},
                               data=json.dumps({
                                   "match": {
-                                      "nw_dst": "10.0.0.1",
+                                      "nw_dst": k.ipv4_dst,
                                       "nw_proto": "UDP",
-                                      "tp_dst": dport,
+                                      "tp_dst": k.udp_dst,
                                   },
-                                  "actions": {"queue": queue}
+                                  "actions": {"queue": self.flows_limits[k][1]}
                               }))
             self.log_rest_result(r)
 
