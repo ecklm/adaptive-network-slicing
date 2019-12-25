@@ -8,6 +8,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 import requests
 import json
+from dataclasses import dataclass
 
 
 class AdaptingMonitor13(app_manager.RyuApp):
@@ -17,8 +18,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
         self.datapaths = {}
-        self.qos_managers = {}
-        self.stats = FlowStatManager(AdaptingMonitor13.time_step)
+        self.qos_managers: Dict[int, QoSManager] = {}  # Key: datapath id
+        self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
         self.monitor_thread = hub.spawn(self._monitor)
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
@@ -30,11 +31,13 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
                 self.qos_managers[datapath.id] = QoSManager(datapath.id, self.logger)
+                self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.time_step)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
                 self.logger.debug('unregister datapath: %016x', datapath.id)
                 del self.datapaths[datapath.id]
                 del self.qos_managers[datapath.id]
+                del self.stats[datapath.id]
 
     def _monitor(self):
         while True:
@@ -78,12 +81,13 @@ class AdaptingMonitor13(app_manager.RyuApp):
         for stat in flowstats:
             # WARNING: stat.byte_count is the number of bytes that MATCHED the rule, not the number of bytes
             # that have finally been transmitted. This is not a problem for us, but it is important to know
-            self.stats.put(ev.msg.datapath.id, stat.match['ipv4_dst'], stat.match['udp_dst'], stat.byte_count)
+            dpid = ev.msg.datapath.id
+            self.stats[dpid].put(stat.match['ipv4_dst'], stat.match['udp_dst'], stat.byte_count)
 
             # Log the stats
             self.logger.info("")
-            avg = self.stats.get_avg(ev.msg.datapath.id, stat.match['ipv4_dst'], stat.match['udp_dst'])
-            avg_speed = self.stats.get_avg_speed(ev.msg.datapath.id, stat.match['ipv4_dst'], stat.match['udp_dst'])
+            avg = self.stats[dpid].get_avg(stat.match['ipv4_dst'], stat.match['udp_dst'])
+            avg_speed = self.stats[dpid].get_avg_speed(stat.match['ipv4_dst'], stat.match['udp_dst'])
             self.logger.info(
                 "avg (B): {}\n\tavg_speed (B/s): {}\n\tavg_speed (b/s): {}\n\t"
                 "avg_speed (Kb/s): {}\n\tavg_speed (Mb/s): {}".format(
@@ -216,42 +220,41 @@ class FlowStat:
 
 class FlowStatManager:
     def __init__(self, time_step):
-        self.stats: Dict[Tuple[int, str, int], FlowStat] = {}
+        self.stats: Dict[Tuple[str, int], FlowStat] = {}
         self.time_step = time_step
 
-    def put(self, dpid: int, ipv4_dst: str, udp_dst: int, val: int) -> None:
+    def put(self, ipv4_dst: str, udp_dst: int, val: int) -> None:
         """
         Adds a new record to the specified flow's stats
 
-        :param dpid: Datapath ID
         :param ipv4_dst: IPv4 destination address
         :param udp_dst: UDP destination port
         :param val: The measurement value
         """
-        key = (dpid, ipv4_dst, udp_dst)
+        key = (ipv4_dst, udp_dst)
         try:
             self.stats[key].put(val)
         except KeyError:
             self.stats[key] = FlowStat(self.time_step)
             self.stats[key].put(val)
 
-    def get_avg(self, dpid: int, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
+    def get_avg(self, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
         """
         :param prefix: See `FlowStat.get_avg` parameter documentation
         :return: The result of `FlowStat.get_avg` for the given flow
         """
-        return self.stats[(dpid, ipv4_dst, upd_dst)].get_avg(prefix)  # Let the KeyError exception arise if any
+        return self.stats[(ipv4_dst, upd_dst)].get_avg(prefix)  # Let the KeyError exception arise if any
 
-    def get_avg_speed(self, dpid: int, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
+    def get_avg_speed(self, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
         """
         :param prefix: See `FlowStat.get_avg` parameter documentation
         :return: The result of `FlowStat.get_avg_speed` for the given flow
         """
-        return self.stats[(dpid, ipv4_dst, upd_dst)].get_avg_speed(prefix)
+        return self.stats[(ipv4_dst, upd_dst)].get_avg_speed(prefix)
 
-    def get_avg_speed_bps(self, dpid: int, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
+    def get_avg_speed_bps(self, ipv4_dst: str, upd_dst: int, prefix: str = None) -> float:
         """
         :param prefix: See `FlowStat.get_avg` parameter documentation
         :return: The result of `FlowStat.get_avg_bps` for the given flow
         """
-        return self.stats[(dpid, ipv4_dst, upd_dst)].get_avg_speed_bps(prefix)
+        return self.stats[(ipv4_dst, upd_dst)].get_avg_speed_bps(prefix)
