@@ -9,6 +9,7 @@ from ryu.lib import hub
 import requests
 import json
 from dataclasses import dataclass
+from copy import deepcopy
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,10 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
 
 class QoSManager:
+    # The smallest difference in b/s that can result in rate limit changing in a queue. This
+    # helps to perform histeresys in the adapting logic
+    LIMIT_STEP = 2 * 10 ** 6
+
     def __init__(self, datapath: int, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
 
@@ -111,6 +116,9 @@ class QoSManager:
         for k in self.flows_limits:
             self.flows_limits[k] = (self.flows_limits[k], qnum)
             qnum += 1
+        self.FLOWS_INIT_LIMITS: Dict[FlowId, Tuple[int, int]] = \
+            deepcopy(self.flows_limits)  # This does not change, it contains the values of the ideal, "customer" case
+
         self.__logger = logger
         self.__set_ovsdb_addr()
         self.set_rules()
@@ -148,10 +156,11 @@ class QoSManager:
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
         modified = False
         for k in flowstats:
-            if self.flows_limits[k][0] > flowstats[k] and flowstats[k] > 0:
-                self.flows_limits[k] = (int(flowstats[k]), self.flows_limits[k][1])
-                self.__logger.info("Flow limit for flow '{}' updated to {}bps".format(k, flowstats[k]))
-                modified = True
+            if flowstats[k] > 0:
+                newlimit = min(flowstats[k], self.FLOWS_INIT_LIMITS[k][0])
+                if self._update_limit(k, newlimit):
+                    modified = True
+                    self.__logger.info("Flow limit for flow '{}' updated to {}bps".format(k, newlimit))
         if modified:
             self.set_queues()
 
@@ -185,12 +194,21 @@ class QoSManager:
         """
         return self.flows_limits[flow][0]
 
-    def _update_limit(self, flow: FlowId, newlimit) -> None:
+    def _update_limit(self, flow: FlowId, newlimit, force: bool = False) -> bool:
         """
+        Update the limit of a queue related to `flow`. The function will only update the value if `newlimit` is
+        further from the actual limit than `LIMIT_STEP` b/s.
+
         :param flow: The flow identifier to set new limit to.
         :param newlimit: The new rate limit for `flow` in bits/s
+        :param force: Force updating the limit even if the difference is smaller than `LIMIT_STEP`
+        :return: Whether the limit is updated or not
         """
-        self.flows_limits[flow] = (int(newlimit), self.flows_limits[flow][1])
+        if abs(newlimit - self.get_current_limit(flow)) > QoSManager.LIMIT_STEP or force:
+            self.flows_limits[flow] = (int(newlimit), self.flows_limits[flow][1])
+            return True
+        else:
+            return False
 
     def log_rest_result(self, r: requests.Response) -> None:
         if r.status_code >= 300 or \
