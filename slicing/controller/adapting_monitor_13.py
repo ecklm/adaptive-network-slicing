@@ -155,12 +155,26 @@ class QoSManager:
 
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
         modified = False
-        for k in flowstats:
-            if flowstats[k] > 0:
-                newlimit = min(flowstats[k], self.FLOWS_INIT_LIMITS[k][0])
-                if self._update_limit(k, newlimit):
-                    modified = True
-                    self.__logger.info("Flow limit for flow '{}' updated to {}bps".format(k, newlimit))
+        unused_candidates = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0] / 2]
+        used_candidates = [k for k, v in flowstats.items() if v > self.FLOWS_INIT_LIMITS[k][0] / 2]
+        self.__logger.debug("unused:\t%s\nused:\t%s\nrest (virtually impossible):\t%s" %
+                            (unused_candidates,
+                             used_candidates,
+                             [k for k, v in flowstats.items() if v == self.FLOWS_INIT_LIMITS[k][0] / 2]))
+        overall_gain = 0  # b/s which is available extra after rate reduction
+        for k in unused_candidates:
+            original_limit = self.FLOWS_INIT_LIMITS[k][0]
+            if self._update_limit(k, original_limit / 2):
+                modified = True
+            overall_gain += original_limit - self.get_current_limit(k)
+
+        try:
+            available_per_host = overall_gain / len(used_candidates)
+        except ZeroDivisionError:
+            available_per_host = 0
+        for k in used_candidates:
+            if (self._update_limit(k, self.FLOWS_INIT_LIMITS[k][0] + available_per_host)):
+                modified = True
         if modified:
             self.set_queues()
 
@@ -206,6 +220,7 @@ class QoSManager:
         """
         if abs(newlimit - self.get_current_limit(flow)) > QoSManager.LIMIT_STEP or force:
             self.flows_limits[flow] = (int(newlimit), self.flows_limits[flow][1])
+            self.__logger.info("Flow limit for flow '{}' updated to {}bps".format(flow, newlimit))
             return True
         else:
             return False
@@ -245,11 +260,14 @@ class FlowStat:
         :param prefix: A prefix to scale the result with. See possible values in `FlowStat.scaling_prefixes`
         :return: The average number of bytes transmitted during the last `window_size` number of measurements
         """
-        try:
+        if len(self.data) == 0:
+            return 0
+        elif len(self.data) == 1:
+            # This number will not necessarily make sense, but at least it may prevent the QoS manager from decreasing
+            # the limits for all flows at the first measurement
+            return self.data[0]
+        else:
             return (self.data[-1] - self.data[0]) * FlowStat.scaling_prefixes[prefix] / float(len(self.data) - 1)
-        except ZeroDivisionError:
-            # Just in case accidentally called on an empty dataset
-            return 0.0
 
     def get_avg_speed(self, prefix: str = None) -> float:
         """
