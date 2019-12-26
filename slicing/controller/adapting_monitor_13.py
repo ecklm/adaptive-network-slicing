@@ -66,23 +66,26 @@ class AdaptingMonitor13(app_manager.RyuApp):
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_logger(self, ev):
         body = ev.msg.body
+        dpid = ev.msg.datapath.id
 
         flowstats = sorted([flow for flow in body if flow.priority == 1 and flow.table_id == 0],
                            key=lambda flow: (flow.match['ipv4_dst'], flow.match['udp_dst']))
         if len(flowstats) > 0:
             self.logger.info("")
-            self.logger.info('datapath         '
-                             'ipv4-dst   udp-dst '
-                             'queue-id packets  bytes')
-            self.logger.info('---------------- '
-                             '---------- ------- '
-                             '-------- -------- -----------')
+            self.logger.info('%16s %10s %7s %8s %8s %11s %16s %20s' %
+                             ('datapath', 'ipv4-dst', 'udp-dst', 'queue-id', 'packets',
+                              'bytes', 'avg-speed (Mb/s)', 'current-limit (Mb/s)'))
+            self.logger.info('%s %s %s %s %s %s %s %s' %
+                             ('-' * 16, '-' * 10, '-' * 7, '-' * 8, '-' * 8, '-' * 11, '-' * 16, '-' * 20))
         for stat in flowstats:
-            self.logger.info('%016x %10s %7d %8d %8d %11d',
-                             ev.msg.datapath.id,
+            flow = FlowId(stat.match['ipv4_dst'], stat.match['udp_dst'])
+            avg_speed = self.stats[dpid].get_avg_speed_bps(flow, 'M')
+            self.logger.info('%016x %10s %7d %8d %8d %11d %16.2f %20.2f',
+                             dpid,
                              stat.match['ipv4_dst'], stat.match['udp_dst'],
                              stat.instructions[0].actions[0].queue_id,
-                             stat.packet_count, stat.byte_count)
+                             stat.packet_count, stat.byte_count, avg_speed,
+                             self.qos_managers[dpid].get_current_limit(flow) / 10 ** 6)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
@@ -95,28 +98,15 @@ class AdaptingMonitor13(app_manager.RyuApp):
             # that have finally been transmitted. This is not a problem for us, but it is important to know
             flow = FlowId(stat.match['ipv4_dst'], stat.match['udp_dst'])
             self.stats[dpid].put(flow, stat.byte_count)
-
-            # Log the stats
-            self.logger.info("")
-            avg = self.stats[dpid].get_avg(flow)
-            avg_speed = self.stats[dpid].get_avg_speed(flow)
-            self.logger.info(
-                "avg (B): {}\n\tavg_speed (B/s): {}\n\tavg_speed (b/s): {}\n\t"
-                "avg_speed (Kb/s): {}\n\tavg_speed (Mb/s): {}".format(
-                    avg,
-                    avg_speed,
-                    avg_speed * 8,
-                    avg_speed * 8 / 1000,
-                    avg_speed * 8 / 1000000
-                )
-            )
         self.qos_managers[dpid].adapt_queues(self.stats[dpid].export_avg_speeds_bps())
 
 
 class QoSManager:
     def __init__(self, datapath: int, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
-        self.flows_limits: Dict[FlowId, Tuple[int, int]] = flows_with_init_limits
+
+        self.flows_limits: Dict[FlowId, Tuple[int, int]] = \
+            flows_with_init_limits  # This will hold the actual values updated
         qnum = 0
         for k in self.flows_limits:
             self.flows_limits[k] = (self.flows_limits[k], qnum)
@@ -188,6 +178,19 @@ class QoSManager:
 
         r = requests.get("http://localhost:8080/qos/rules/%016d" % self.__datapath)
         self.log_rest_result(r)
+
+    def get_current_limit(self, flow: FlowId) -> int:
+        """
+        :return: The current rate limit applied to `flow` in bits/s
+        """
+        return self.flows_limits[flow][0]
+
+    def _update_limit(self, flow: FlowId, newlimit) -> None:
+        """
+        :param flow: The flow identifier to set new limit to.
+        :param newlimit: The new rate limit for `flow` in bits/s
+        """
+        self.flows_limits[flow] = (int(newlimit), self.flows_limits[flow][1])
 
     def log_rest_result(self, r: requests.Response) -> None:
         if r.status_code >= 300 or \
