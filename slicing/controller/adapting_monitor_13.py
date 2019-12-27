@@ -110,11 +110,10 @@ class QoSManager:
     def __init__(self, datapath: int, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
 
-        self.flows_limits: Dict[FlowId, Tuple[int, int]] = \
-            flows_with_init_limits  # This will hold the actual values updated
+        self.flows_limits: Dict[FlowId, Tuple[int, int]] = {}  # This will hold the actual values updated
         qnum = 0
-        for k in self.flows_limits:
-            self.flows_limits[k] = (self.flows_limits[k], qnum)
+        for k in flows_with_init_limits:
+            self.flows_limits[k] = (flows_with_init_limits[k], qnum)
             qnum += 1
         self.FLOWS_INIT_LIMITS: Dict[FlowId, Tuple[int, int]] = \
             deepcopy(self.flows_limits)  # This does not change, it contains the values of the ideal, "customer" case
