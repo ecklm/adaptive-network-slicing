@@ -1,5 +1,6 @@
 from mininet.topo import Topo
 
+
 class SlicingTopo(Topo):
     """Custom topology for network slicing
 
@@ -12,13 +13,13 @@ class SlicingTopo(Topo):
         "Create custom topo."
 
         # Add hosts and switches
-        h1 = self.addHost( 'h1' )
-        h2 = self.addHost( 'h2' )
-        s1 = self.addSwitch( 's1' )
+        h1 = self.addHost('h1')
+        h2 = self.addHost('h2')
+        s1 = self.addSwitch('s1')
 
         # Add links
         self.addLink(h1, s1)
         self.addLink(h2, s1)
 
 
-topos = { 'slicingtopo': ( lambda: SlicingTopo() ) }
+topos = {'slicingtopo': (lambda: SlicingTopo())}
