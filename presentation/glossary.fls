@@ -1,0 +1,5 @@
+PWD /home/ecklm/Dropbox/Egyetem/EIT Digital/TUB/Tárgyak/Semester 1/Network Architectures: Internet routing seminar/Presentation
+INPUT /usr/share/texmf-dist/web2c/texmf.cnf
+INPUT /var/lib/texmf/web2c/pdftex/latex.fmt
+INPUT glossary.tex
+OUTPUT glossary.log

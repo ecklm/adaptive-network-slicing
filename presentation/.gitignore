@@ -1,0 +1,13 @@
+*.acn
+*.aux
+*.bbl
+*.blg
+*.glo
+*.ist
+*.log
+*.nav
+*.out
+*.pdf
+*.snm
+*.synctex.gz
+*.toc
