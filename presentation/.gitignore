@@ -5,6 +5,7 @@
 *.glo
 *.ist
 *.log
+*.fls
 *.nav
 *.out
 *.pdf
