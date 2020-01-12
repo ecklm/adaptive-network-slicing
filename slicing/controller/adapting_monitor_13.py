@@ -111,10 +111,9 @@ class QoSManager:
         self.__datapath = datapath
 
         self.flows_limits: Dict[FlowId, Tuple[int, int]] = {}  # This will hold the actual values updated
-        qnum = 0
-        for k in flows_with_init_limits:
+        flows_initlims_enum = enumerate(flows_with_init_limits)
+        for qnum, k in flows_initlims_enum:
             self.flows_limits[k] = (flows_with_init_limits[k], qnum)
-            qnum += 1
         self.FLOWS_INIT_LIMITS: Dict[FlowId, Tuple[int, int]] = \
             deepcopy(self.flows_limits)  # This does not change, it contains the values of the ideal, "customer" case
 
