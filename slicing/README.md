@@ -24,8 +24,8 @@ Given 3 flows:
 
 ## Objective
 
-When some of the flows are not using the maximum bandwidth available for them,
-the other flows get a bit more than they are originally assigned
+When some of the flows are not using the bandwidth available for them,
+the other flows get a bit more than they are originally assigned.
 
 ## Limitations and scenario
 

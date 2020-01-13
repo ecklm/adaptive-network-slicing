@@ -16,8 +16,8 @@ flows which use more than half of their assigned bandwidths.
 ## Running the controller
 
 To run the controller, I recommend setting up a virtual environment with Python3
-and installing the python dependencies.  Then you can use the
-`run-controller.sh` script.
+and installing the python dependencies described in `requirements.txt`.  Then
+you can use the `run-controller.sh` script.
 
 **Note:** Initialising the QoS settings is a bit problematic. It may happen that
 it fails at the queue setting step claiming missing OVS switch. It is

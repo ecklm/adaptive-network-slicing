@@ -1,7 +1,8 @@
 # Experiment
 
 This directory should be mounted or copied into the reference mininet VM
-available [here](https://github.com/mininet/mininet/wiki/Mininet-VM-Images).
+available [here](https://github.com/mininet/mininet/wiki/Mininet-VM-Images). At
+the time of doing this project, it contained Mininet 2.2.2.
 
 Then to run the setup you should run `setup-mininet.sh`. The experimentation
 part is manual to make the demo interactive. The initial commands are described
