@@ -133,14 +133,17 @@ class QoSManager:
         self.log_rest_result(r)
 
     def set_queues(self):
-        r = requests.post("http://localhost:8080/qos/queue/%016d" % self.__datapath.id,
-                          headers={'Content-Type': 'application/json'},
-                          data=json.dumps({
-                              "port_name": "s1-eth1", "type": "linux-htb", "max_rate": "50000000",
-                              "queues":
-                                  [{"max_rate": str(self.flows_limits[k][0])} for k in self.flows_limits]
-                          }))
-        self.log_rest_result(r)
+        ports = [port.name.decode('utf-8') for port in self.__datapath.ports.values()][:-1]  # Last element is the
+        # switch itself
+        for port in ports:
+            r = requests.post("http://localhost:8080/qos/queue/%016d" % self.__datapath.id,
+                              headers={'Content-Type': 'application/json'},
+                              data=json.dumps({
+                                  "port_name": port, "type": "linux-htb", "max_rate": "50000000",
+                                  "queues":
+                                      [{"max_rate": str(self.flows_limits[k][0])} for k in self.flows_limits]
+                              }))
+            self.log_rest_result(r)
 
     def get_queues(self):
         """
