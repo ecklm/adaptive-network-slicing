@@ -106,12 +106,15 @@ class QoSManager:
     # The smallest difference in b/s that can result in rate limit changing in a queue. This
     # helps to perform histeresys in the adapting logic
     LIMIT_STEP = 2 * 10 ** 6
+    DEFAULT_MAX_RATE = -1
 
     def __init__(self, datapath: controller.Datapath, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
 
         self.flows_limits: Dict[FlowId, Tuple[int, int]] = {}  # This will hold the actual values updated
-        flows_initlims_enum = enumerate(flows_with_init_limits)
+
+        # Start from qnume = 1 so that the matches to the first rule does not get the same queue as non-matches
+        flows_initlims_enum = enumerate(flows_with_init_limits, start=1)
         for qnum, k in flows_initlims_enum:
             self.flows_limits[k] = (flows_with_init_limits[k], qnum)
         self.FLOWS_INIT_LIMITS: Dict[FlowId, Tuple[int, int]] = \
@@ -135,13 +138,14 @@ class QoSManager:
     def set_queues(self):
         ports = [port.name.decode('utf-8') for port in self.__datapath.ports.values()][:-1]  # Last element is the
         # switch itself
+        queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
         for port in ports:
             r = requests.post("http://localhost:8080/qos/queue/%016d" % self.__datapath.id,
                               headers={'Content-Type': 'application/json'},
                               data=json.dumps({
-                                  "port_name": port, "type": "linux-htb", "max_rate": "50000000",
+                                  "port_name": port, "type": "linux-htb", "max_rate": str(QoSManager.DEFAULT_MAX_RATE),
                                   "queues":
-                                      [{"max_rate": str(self.flows_limits[k][0])} for k in self.flows_limits]
+                                      [{"max_rate": str(limit)} for limit in queue_limits]
                               }))
             self.log_rest_result(r)
 
