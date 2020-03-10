@@ -1,7 +1,7 @@
 from mininet.topo import Topo
 
 
-class SlicingTopo(Topo):
+class SimplestTopo(Topo):
     """Custom topology for network slicing
 
        h1 --- s1 --- h2
@@ -22,4 +22,4 @@ class SlicingTopo(Topo):
         self.addLink(h2, s1)
 
 
-topos = {'slicingtopo': (lambda: SlicingTopo())}
+topos = {'simplest_topo': (lambda: SimplestTopo())}
