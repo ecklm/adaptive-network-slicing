@@ -1,7 +1,7 @@
 from typing import Dict, Tuple
 
 from ryu.base import app_manager
-from ryu.controller import ofp_event
+from ryu.controller import ofp_event, controller
 from ryu.ofproto import ofproto_v1_3
 from ryu.controller.handler import MAIN_DISPATCHER, DEAD_DISPATCHER
 from ryu.controller.handler import set_ev_cls
@@ -42,7 +42,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
             if datapath.id not in self.datapaths:
                 self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
-                self.qos_managers[datapath.id] = QoSManager(datapath.id, AdaptingMonitor13.flows_limits, self.logger)
+                self.qos_managers[datapath.id] = QoSManager(datapath, AdaptingMonitor13.flows_limits, self.logger)
                 self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.time_step)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
@@ -107,7 +107,7 @@ class QoSManager:
     # helps to perform histeresys in the adapting logic
     LIMIT_STEP = 2 * 10 ** 6
 
-    def __init__(self, datapath: int, flows_with_init_limits: Dict[FlowId, int], logger):
+    def __init__(self, datapath: controller.Datapath, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
 
         self.flows_limits: Dict[FlowId, Tuple[int, int]] = {}  # This will hold the actual values updated
@@ -127,13 +127,13 @@ class QoSManager:
         This method sets the address of the openvswitch database to the controller. This MUST be called once before
         sending configuration commands.
         """
-        r = requests.put("http://localhost:8080/v1.0/conf/switches/%016d/ovsdb_addr" % self.__datapath,
+        r = requests.put("http://localhost:8080/v1.0/conf/switches/%016d/ovsdb_addr" % self.__datapath.id,
                          data='"tcp:192.0.2.20:6632"',
                          headers={'Content-Type': 'application/x-www-form-urlencoded'})
         self.log_rest_result(r)
 
     def set_queues(self):
-        r = requests.post("http://localhost:8080/qos/queue/%016d" % self.__datapath,
+        r = requests.post("http://localhost:8080/qos/queue/%016d" % self.__datapath.id,
                           headers={'Content-Type': 'application/json'},
                           data=json.dumps({
                               "port_name": "s1-eth1", "type": "linux-htb", "max_rate": "50000000",
@@ -148,7 +148,7 @@ class QoSManager:
         If it is run too soon, the controller responds with a failure.
         Calling this function right after setting the OVSDB address will result in occasional failures
         """
-        r = requests.get("http://localhost:8080/qos/queue/%016d" % self.__datapath)
+        r = requests.get("http://localhost:8080/qos/queue/%016d" % self.__datapath.id)
         self.log_rest_result(r)
 
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
@@ -178,7 +178,7 @@ class QoSManager:
 
     def set_rules(self):
         for k in self.flows_limits:
-            r = requests.post("http://localhost:8080/qos/rules/%016d" % self.__datapath,
+            r = requests.post("http://localhost:8080/qos/rules/%016d" % self.__datapath.id,
                               headers={'Content-Type': 'application/json'},
                               data=json.dumps({
                                   "match": {
@@ -197,7 +197,7 @@ class QoSManager:
         event.
         """
 
-        r = requests.get("http://localhost:8080/qos/rules/%016d" % self.__datapath)
+        r = requests.get("http://localhost:8080/qos/rules/%016d" % self.__datapath.id)
         self.log_rest_result(r)
 
     def get_current_limit(self, flow: FlowId) -> int:
