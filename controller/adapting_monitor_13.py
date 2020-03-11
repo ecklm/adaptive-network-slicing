@@ -136,8 +136,9 @@ class QoSManager:
         self.log_rest_result(r)
 
     def set_queues(self):
-        ports = [port.name.decode('utf-8') for port in self.__datapath.ports.values()][:-1]  # Last element is the
-        # switch itself
+        # Extract port names and drop internal port named equivalently as the switch
+        ports = sorted([port.name.decode('utf-8') for port in self.__datapath.ports.values()])[1:]
+        self.__logger.debug("Ports to be configured: {}".format(ports))
         queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
         for port in ports:
             r = requests.post("http://localhost:8080/qos/queue/%016x" % self.__datapath.id,
