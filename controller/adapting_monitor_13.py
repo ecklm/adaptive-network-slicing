@@ -130,7 +130,7 @@ class QoSManager:
         This method sets the address of the openvswitch database to the controller. This MUST be called once before
         sending configuration commands.
         """
-        r = requests.put("http://localhost:8080/v1.0/conf/switches/%016d/ovsdb_addr" % self.__datapath.id,
+        r = requests.put("http://localhost:8080/v1.0/conf/switches/%016x/ovsdb_addr" % self.__datapath.id,
                          data='"tcp:192.0.2.20:6632"',
                          headers={'Content-Type': 'application/x-www-form-urlencoded'})
         self.log_rest_result(r)
@@ -140,7 +140,7 @@ class QoSManager:
         # switch itself
         queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
         for port in ports:
-            r = requests.post("http://localhost:8080/qos/queue/%016d" % self.__datapath.id,
+            r = requests.post("http://localhost:8080/qos/queue/%016x" % self.__datapath.id,
                               headers={'Content-Type': 'application/json'},
                               data=json.dumps({
                                   "port_name": port, "type": "linux-htb", "max_rate": str(QoSManager.DEFAULT_MAX_RATE),
@@ -155,7 +155,7 @@ class QoSManager:
         If it is run too soon, the controller responds with a failure.
         Calling this function right after setting the OVSDB address will result in occasional failures
         """
-        r = requests.get("http://localhost:8080/qos/queue/%016d" % self.__datapath.id)
+        r = requests.get("http://localhost:8080/qos/queue/%016x" % self.__datapath.id)
         self.log_rest_result(r)
 
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
@@ -185,7 +185,7 @@ class QoSManager:
 
     def set_rules(self):
         for k in self.flows_limits:
-            r = requests.post("http://localhost:8080/qos/rules/%016d" % self.__datapath.id,
+            r = requests.post("http://localhost:8080/qos/rules/%016x" % self.__datapath.id,
                               headers={'Content-Type': 'application/json'},
                               data=json.dumps({
                                   "match": {
@@ -204,7 +204,7 @@ class QoSManager:
         event.
         """
 
-        r = requests.get("http://localhost:8080/qos/rules/%016d" % self.__datapath.id)
+        r = requests.get("http://localhost:8080/qos/rules/%016x" % self.__datapath.id)
         self.log_rest_result(r)
 
     def get_current_limit(self, flow: FlowId) -> int:
