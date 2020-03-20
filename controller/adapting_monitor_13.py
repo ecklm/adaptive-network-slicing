@@ -5,6 +5,7 @@ from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_3
 
+import config_handler
 from flow import *
 from qos_manager import QoSManager
 
@@ -12,18 +13,59 @@ from qos_manager import QoSManager
 class AdaptingMonitor13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     time_step = 5  # The number of seconds between two stat request
-    flows_limits = {
-        FlowId('10.0.0.1', 5001): 5 * 10 ** 6,
-        FlowId('10.0.0.1', 5002): 15 * 10 ** 6,
-        FlowId('10.0.0.1', 5003): 25 * 10 ** 6
-    }
+    flows_limits: Dict[FlowId, int] = {}  # Rate limits associated to different flows
 
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
+
+        self.configure("config.yml")
+
         self.datapaths = {}
         self.qos_managers: Dict[int, QoSManager] = {}  # Key: datapath id
         self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
         self.monitor_thread = hub.spawn(self._monitor)
+
+    def configure(self, config_path: str) -> None:
+        """
+        Configure the application based on the values in the file available at `config_path`.
+
+        A few exceptions are not caught on purpose. `config_handler.ConfigError` is raised when there is some problem
+        with the config file and it should definitely result in application failure.
+        `
+
+        :param config_path: Path to the configuration file
+        """
+        config = config_handler.ConfigHandler(config_path)
+        # Don't catch exception on purpose, bad config => Not working app
+
+        config = config.config
+        # Mandatory fields
+        for flow in config["flows"]:
+            try:
+                AdaptingMonitor13.flows_limits[FlowId.from_dict(flow)] = flow["base_ratelimit"]
+            except (TypeError, KeyError) as e:
+                self.logger.error("config: Invalid Flow object: {}. Reason: {}".format(flow, e))
+        if len(AdaptingMonitor13.flows_limits) <= 0:
+            raise config_handler.ConfigError("config: No valid flow definition found.")
+
+        # Optional fields
+        if "time_step" in config:
+            AdaptingMonitor13.time_step = int(config["time_step"])
+            self.logger.debug("config: time_step set to {}".format(AdaptingMonitor13.time_step))
+        else:
+            self.logger.debug("config: time_step not set")
+
+        if "limit_step" in config:
+            QoSManager.LIMIT_STEP = int(config["limit_step"])
+            self.logger.debug("config: limit_step set to {}".format(QoSManager.LIMIT_STEP))
+        else:
+            self.logger.debug("config: limit_step not set")
+
+        if "interface_max_rate" in config:
+            QoSManager.DEFAULT_MAX_RATE = int(config["interface_max_rate"])
+            self.logger.debug("config: interface_max_rate set to {}".format(QoSManager.DEFAULT_MAX_RATE))
+        else:
+            self.logger.debug("config: interface_max_rate not set")
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])

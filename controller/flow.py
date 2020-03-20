@@ -7,6 +7,21 @@ class FlowId:
     ipv4_dst: str
     udp_dst: int
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, int]):
+        """
+        Create a FlowId object out of a dictionary, using the properly named fields.
+
+        In case the dictionary does not have the appropriate fields, a TypeError
+        exception is raised.
+
+        :param d: The dictionary to parse.
+        """
+        try:
+            return FlowId(d["ipv4_dst"], d["udp_dst"])
+        except KeyError as ex:
+            raise TypeError("The given dict is not a proper FlowId, {} is missing.".format(ex)) from ex
+
 
 class FlowStat:
     window_size = 10  # The number of data stored for statistical calculations

@@ -33,7 +33,7 @@ jobs:
         run: |
           pip install pydocstyle
           pydocstyle --convention=pep257 --add-ignore=D100,D101,D102,D103,D104,D105,D106,D107
-  config_test:
+  config_lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
