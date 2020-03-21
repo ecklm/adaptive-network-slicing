@@ -33,8 +33,9 @@ class QoSManager:
 
     def __set_ovsdb_addr(self):
         """
-        This method sets the address of the openvswitch database to the controller. This MUST be called once before
-        sending configuration commands.
+        Set the address of the openvswitch database to the controller.
+
+        This MUST be called once before sending configuration commands.
         """
         r = requests.put("http://localhost:8080/v1.0/conf/switches/%016x/ovsdb_addr" % self.__datapath.id,
                          data='"tcp:192.0.2.20:6632"',
@@ -58,9 +59,11 @@ class QoSManager:
 
     def get_queues(self):
         """
+        Set queus in the switch.
+
         WARNING: This request MUST be run some time after setting the OVSDB address to the controller.
         If it is run too soon, the controller responds with a failure.
-        Calling this function right after setting the OVSDB address will result in occasional failures
+        Calling this function right after setting the OVSDB address will result in occasional failures.
         """
         r = requests.get("http://localhost:8080/qos/queue/%016x" % self.__datapath.id)
         self.log_rest_result(r)
@@ -106,28 +109,32 @@ class QoSManager:
 
     def get_rules(self):
         """
+        Log rules already installed in the switch.
+
         WARNING: This call makes the switch send an OpenFlow statsReply message,
         which triggers every function subscribed to the ofp_event.EventOFPFlowStatsReply
         event.
         """
-
         r = requests.get("http://localhost:8080/qos/rules/%016x" % self.__datapath.id)
         self.log_rest_result(r)
 
     def get_current_limit(self, flow: FlowId) -> int:
         """
-        :return: The current rate limit applied to `flow` in bits/s
+        Get current limit for a specific flow.
+
+        :return: The current rate limit applied to `flow` in bits/s.
         """
         return self.flows_limits[flow][0]
 
     def _update_limit(self, flow: FlowId, newlimit, force: bool = False) -> bool:
         """
-        Update the limit of a queue related to `flow`. The function will only update the value if `newlimit` is
-        further from the actual limit than `LIMIT_STEP` b/s.
+        Update the limit of a queue related to `flow`.
+
+        The function will only update the value if `newlimit` is further from the actual limit than `LIMIT_STEP` b/s.
 
         :param flow: The flow identifier to set new limit to.
-        :param newlimit: The new rate limit for `flow` in bits/s
-        :param force: Force updating the limit even if the difference is smaller than `LIMIT_STEP`
+        :param newlimit: The new rate limit for `flow` in bits/s.
+        :param force: Force updating the limit even if the difference is smaller than `LIMIT_STEP`.
         :return: Whether the limit is updated or not
         """
         if abs(newlimit - self.get_current_limit(flow)) > QoSManager.LIMIT_STEP or force:
