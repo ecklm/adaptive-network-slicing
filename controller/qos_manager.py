@@ -12,7 +12,40 @@ class QoSManager:
     # The smallest difference in b/s that can result in rate limit changing in a queue. This
     # helps to perform histeresys in the adapting logic
     LIMIT_STEP = 2 * 10 ** 6
-    DEFAULT_MAX_RATE = -1
+    DEFAULT_MAX_RATE = -1  # Max rate to be set on a queue if not told otherwise.
+    OVSDB_ADDR: str  # Address of the OVS database
+    CONTROLLER_BASEURL: str  # Base URL where the controller can be reached.
+
+    @classmethod
+    def configure(cls, ch: config_handler.ConfigHandler, logger) -> None:
+        """
+        Configure common class values based on the config file.
+
+        :param ch: The config_handler object.
+        :param logger: Logger to log messages to.
+        """
+        # Mandatory fields
+        cls.CONTROLLER_BASEURL = ch.config["controller_baseurl"]
+        logger.info("config: controller_baseurl set to {}".format(cls.CONTROLLER_BASEURL))
+
+        if type(ch.config["ovsdb_addr"]) == str:
+            cls.OVSDB_ADDR = ch.config["ovsdb_addr"]
+            logger.debug("config: ovsdb_addr set to {}".format(cls.OVSDB_ADDR))
+        else:
+            raise TypeError("config: ovsdb_addr must be string")
+
+        # Optional fields
+        if "limit_step" in ch.config:
+            cls.LIMIT_STEP = int(ch.config["limit_step"])
+            logger.debug("config: limit_step set to {}".format(cls.LIMIT_STEP))
+        else:
+            logger.debug("config: limit_step not set")
+
+        if "interface_max_rate" in ch.config:
+            cls.DEFAULT_MAX_RATE = int(ch.config["interface_max_rate"])
+            logger.debug("config: interface_max_rate set to {}".format(cls.DEFAULT_MAX_RATE))
+        else:
+            logger.debug("config: interface_max_rate not set")
 
     def __init__(self, datapath: controller.Datapath, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
@@ -37,8 +70,8 @@ class QoSManager:
 
         This MUST be called once before sending configuration commands.
         """
-        r = requests.put("http://localhost:8080/v1.0/conf/switches/%016x/ovsdb_addr" % self.__datapath.id,
-                         data='"tcp:192.0.2.20:6632"',
+        r = requests.put("%s/v1.0/conf/switches/%016x/ovsdb_addr" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id),
+                         data='"{}"'.format(QoSManager.OVSDB_ADDR),
                          headers={'Content-Type': 'application/x-www-form-urlencoded'})
         self.log_rest_result(r)
 
@@ -48,7 +81,7 @@ class QoSManager:
         self.__logger.debug("Ports to be configured: {}".format(ports))
         queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
         for port in ports:
-            r = requests.post("http://localhost:8080/qos/queue/%016x" % self.__datapath.id,
+            r = requests.post("%s/qos/queue/%016x" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id),
                               headers={'Content-Type': 'application/json'},
                               data=json.dumps({
                                   "port_name": port, "type": "linux-htb", "max_rate": str(QoSManager.DEFAULT_MAX_RATE),
@@ -65,7 +98,7 @@ class QoSManager:
         If it is run too soon, the controller responds with a failure.
         Calling this function right after setting the OVSDB address will result in occasional failures.
         """
-        r = requests.get("http://localhost:8080/qos/queue/%016x" % self.__datapath.id)
+        r = requests.get("%s/qos/queue/%016x" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id))
         self.log_rest_result(r)
 
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
@@ -95,7 +128,7 @@ class QoSManager:
 
     def set_rules(self):
         for k in self.flows_limits:
-            r = requests.post("http://localhost:8080/qos/rules/%016x" % self.__datapath.id,
+            r = requests.post("%s/qos/rules/%016x" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id),
                               headers={'Content-Type': 'application/json'},
                               data=json.dumps({
                                   "match": {
@@ -115,7 +148,7 @@ class QoSManager:
         which triggers every function subscribed to the ofp_event.EventOFPFlowStatsReply
         event.
         """
-        r = requests.get("http://localhost:8080/qos/rules/%016x" % self.__datapath.id)
+        r = requests.get("%s/qos/rules/%016x" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id))
         self.log_rest_result(r)
 
     def get_current_limit(self, flow: FlowId) -> int:

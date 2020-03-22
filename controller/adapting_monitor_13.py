@@ -5,25 +5,63 @@ from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_3
 
+import config_handler
 from flow import *
 from qos_manager import QoSManager
 
 
 class AdaptingMonitor13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    time_step = 5  # The number of seconds between two stat request
-    flows_limits = {
-        FlowId('10.0.0.1', 5001): 5 * 10 ** 6,
-        FlowId('10.0.0.1', 5002): 15 * 10 ** 6,
-        FlowId('10.0.0.1', 5003): 25 * 10 ** 6
-    }
+    TIME_STEP = 5  # The number of seconds between two stat request
+    FLOWS_LIMITS: Dict[FlowId, int] = {}  # Rate limits associated to different flows
 
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
+
+        self.configure("config.yml", self.logger)
+
         self.datapaths = {}
         self.qos_managers: Dict[int, QoSManager] = {}  # Key: datapath id
         self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
         self.monitor_thread = hub.spawn(self._monitor)
+
+    @classmethod
+    def configure(cls, config_path: str, logger) -> None:
+        """
+        Configure the application based on the values in the file available at `config_path`.
+
+        A few exceptions are not caught on purpose. `config_handler.ConfigError` is raised when there is some problem
+        with the config file, as it should definitely result in application failure.
+
+        :param config_path: Path to the configuration file
+        :param logger: Logger to log messages to.
+        """
+        ch = config_handler.ConfigHandler(config_path)
+        # Don't catch exception on purpose, bad config => Not working app
+
+        # Mandatory fields
+        for flow in ch.config["flows"]:
+            try:
+                new_flow_id = FlowId.from_dict(flow)
+                cls.FLOWS_LIMITS[new_flow_id] = flow["base_ratelimit"]
+                logger.info("config: flow configuration added: ({}, {})".format(
+                    new_flow_id, flow["base_ratelimit"])
+                )
+            except (TypeError, KeyError) as e:
+                logger.error("config: Invalid Flow object: {}. Reason: {}".format(flow, e))
+        if len(cls.FLOWS_LIMITS) <= 0:
+            raise config_handler.ConfigError("config: No valid flow definition found.")
+
+        # Optional fields
+        if "time_step" in ch.config:
+            cls.TIME_STEP = int(ch.config["time_step"])
+            logger.debug("config: time_step set to {}".format(cls.TIME_STEP))
+        else:
+            logger.debug("config: time_step not set")
+
+        # Configure other classes
+        QoSManager.configure(ch, logger)
+        FlowStat.configure(ch, logger)
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
@@ -33,8 +71,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
             if datapath.id not in self.datapaths:
                 self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
-                self.qos_managers[datapath.id] = QoSManager(datapath, AdaptingMonitor13.flows_limits, self.logger)
-                self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.time_step)
+                self.qos_managers[datapath.id] = QoSManager(datapath, AdaptingMonitor13.FLOWS_LIMITS, self.logger)
+                self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.TIME_STEP)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
                 self.logger.debug('unregister datapath: %016x', datapath.id)
@@ -46,7 +84,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
         while True:
             for dp in self.datapaths.values():
                 self._request_stats(dp)
-            hub.sleep(AdaptingMonitor13.time_step)
+            hub.sleep(AdaptingMonitor13.TIME_STEP)
 
     def _request_stats(self, datapath):
         self.logger.debug('send stats request: %016x', datapath.id)

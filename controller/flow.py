@@ -1,16 +1,48 @@
 from dataclasses import dataclass
 from typing import Dict
 
+import config_handler
+
 
 @dataclass(frozen=True)
 class FlowId:
     ipv4_dst: str
     udp_dst: int
 
+    @classmethod
+    def from_dict(cls, d: Dict[str, int]):
+        """
+        Create a FlowId object out of a dictionary, using the properly named fields.
+
+        In case the dictionary does not have the appropriate fields, a TypeError
+        exception is raised.
+
+        :param d: The dictionary to parse.
+        """
+        try:
+            return FlowId(d["ipv4_dst"], d["udp_dst"])
+        except KeyError as ex:
+            raise TypeError("The given dict is not a proper FlowId, {} is missing.".format(ex)) from ex
+
 
 class FlowStat:
-    window_size = 10  # The number of data stored for statistical calculations
-    scaling_prefixes = {'K': 1 / 1000, 'M': 1 / 1000000, 'G': 1 / 1000000000, None: 1}
+    WINDOW_SIZE = 10  # The number of data stored for statistical calculations
+    SCALING_PREFIXES = {'K': 1 / 1000, 'M': 1 / 1000000, 'G': 1 / 1000000000, None: 1}
+
+    @classmethod
+    def configure(cls, ch: config_handler.ConfigHandler, logger) -> None:
+        """
+        Configure common class values based on the config file.
+
+        :param ch: The config_handler object.
+        :param logger: Logger to log messages to.
+        """
+        # Optional fields
+        if "flowstat_window_size" in ch.config:
+            cls.WINDOW_SIZE = int(ch.config["flowstat_window_size"])
+            logger.debug("config: flowstat_window_size set to {}".format(cls.WINDOW_SIZE))
+        else:
+            logger.debug("config: flowstat_window_size not set")
 
     def __init__(self, time_step: int):
         """:param time_step: The number of seconds between two measurements."""
@@ -18,16 +50,16 @@ class FlowStat:
         self.time_step = time_step
 
     def put(self, val: int):
-        if len(self.data) < FlowStat.window_size:
+        if len(self.data) < FlowStat.WINDOW_SIZE:
             self.data.append(val)
         else:
             self.data = self.data[1:] + [val]
 
     def get_avg(self, prefix: str = None) -> float:
         """
-        Get the average number of bytes transmitted during the last `window_size` number of measurements.
+        Get the average number of bytes transmitted during the last `WINDOW_SIZE` number of measurements.
 
-        :param prefix: A prefix to scale the result with. See possible values in `FlowStat.scaling_prefixes`.
+        :param prefix: A prefix to scale the result with. See possible values in `FlowStat.SCALING_PREFIXES`.
         """
         if len(self.data) == 0:
             return 0
@@ -36,11 +68,11 @@ class FlowStat:
             # the limits for all flows at the first measurement
             return self.data[0]
         else:
-            return (self.data[-1] - self.data[0]) * FlowStat.scaling_prefixes[prefix] / float(len(self.data) - 1)
+            return (self.data[-1] - self.data[0]) * FlowStat.SCALING_PREFIXES[prefix] / float(len(self.data) - 1)
 
     def get_avg_speed(self, prefix: str = None) -> float:
         """
-        Get the average throughput of the Flow during the last `window_size` number of measurements in **Bytes/s**.
+        Get the average throughput of the Flow during the last `WINDOW_SIZE` number of measurements in **Bytes/s**.
 
         :param prefix: See `FlowStat.get_avg` parameter documentation.
         """
@@ -48,7 +80,7 @@ class FlowStat:
 
     def get_avg_speed_bps(self, prefix: str = None) -> float:
         """
-        Get The average throughput of the Flow during the last `window_size` number of measurements in **bits/s**.
+        Get The average throughput of the Flow during the last `WINDOW_SIZE` number of measurements in **bits/s**.
 
         :param prefix: See `FlowStat.get_avg` parameter documentation.
         """

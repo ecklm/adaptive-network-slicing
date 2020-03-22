@@ -1,1 +1,2 @@
 ryu==4.32
+pyyaml
