@@ -18,69 +18,50 @@ class AdaptingMonitor13(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
 
-        self.configure("config.yml")
+        self.configure("config.yml", self.logger)
 
         self.datapaths = {}
         self.qos_managers: Dict[int, QoSManager] = {}  # Key: datapath id
         self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
         self.monitor_thread = hub.spawn(self._monitor)
 
-    def configure(self, config_path: str) -> None:
+    @classmethod
+    def configure(cls, config_path: str, logger) -> None:
         """
         Configure the application based on the values in the file available at `config_path`.
 
         A few exceptions are not caught on purpose. `config_handler.ConfigError` is raised when there is some problem
-        with the config file and it should definitely result in application failure.
-        `
+        with the config file, as it should definitely result in application failure.
 
         :param config_path: Path to the configuration file
+        :param logger: Logger to log messages to.
         """
-        config = config_handler.ConfigHandler(config_path)
+        ch = config_handler.ConfigHandler(config_path)
         # Don't catch exception on purpose, bad config => Not working app
 
-        config = config.config
         # Mandatory fields
-        for flow in config["flows"]:
+        for flow in ch.config["flows"]:
             try:
-                AdaptingMonitor13.FLOWS_LIMITS[FlowId.from_dict(flow)] = flow["base_ratelimit"]
+                new_flow_id = FlowId.from_dict(flow)
+                cls.FLOWS_LIMITS[new_flow_id] = flow["base_ratelimit"]
+                logger.info("config: flow configuration added: ({}, {})".format(
+                    new_flow_id, flow["base_ratelimit"])
+                )
             except (TypeError, KeyError) as e:
-                self.logger.error("config: Invalid Flow object: {}. Reason: {}".format(flow, e))
-        if len(AdaptingMonitor13.FLOWS_LIMITS) <= 0:
+                logger.error("config: Invalid Flow object: {}. Reason: {}".format(flow, e))
+        if len(cls.FLOWS_LIMITS) <= 0:
             raise config_handler.ConfigError("config: No valid flow definition found.")
 
-        QoSManager.CONTROLLER_BASEURL = config["controller_baseurl"]
-        self.logger.debug("config: controller_baseurl set to {}".format(QoSManager.CONTROLLER_BASEURL))
-
-        if type(config["ovsdb_addr"]) == str:
-            QoSManager.OVSDB_ADDR = config["ovsdb_addr"]
-            self.logger.debug("config: ovsdb_addr set to {}".format(QoSManager.OVSDB_ADDR))
-        else:
-            raise TypeError("config: ovsdb_addr must be string")
-
         # Optional fields
-        if "time_step" in config:
-            AdaptingMonitor13.TIME_STEP = int(config["time_step"])
-            self.logger.debug("config: time_step set to {}".format(AdaptingMonitor13.TIME_STEP))
+        if "time_step" in ch.config:
+            cls.TIME_STEP = int(ch.config["time_step"])
+            logger.debug("config: time_step set to {}".format(cls.TIME_STEP))
         else:
-            self.logger.debug("config: time_step not set")
+            logger.debug("config: time_step not set")
 
-        if "limit_step" in config:
-            QoSManager.LIMIT_STEP = int(config["limit_step"])
-            self.logger.debug("config: limit_step set to {}".format(QoSManager.LIMIT_STEP))
-        else:
-            self.logger.debug("config: limit_step not set")
-
-        if "interface_max_rate" in config:
-            QoSManager.DEFAULT_MAX_RATE = int(config["interface_max_rate"])
-            self.logger.debug("config: interface_max_rate set to {}".format(QoSManager.DEFAULT_MAX_RATE))
-        else:
-            self.logger.debug("config: interface_max_rate not set")
-
-        if "flowstat_window_size" in config:
-            FlowStat.WINDOW_SIZE = int(config["flowstat_window_size"])
-            self.logger.debug("config: flowstat_window_size set to {}".format(FlowStat.WINDOW_SIZE))
-        else:
-            self.logger.debug("config: flowstat_window_size not set")
+        # Configure other classes
+        QoSManager.configure(ch, logger)
+        FlowStat.configure(ch, logger)
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])

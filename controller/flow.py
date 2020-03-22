@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Dict
 
+import config_handler
+
 
 @dataclass(frozen=True)
 class FlowId:
@@ -26,6 +28,21 @@ class FlowId:
 class FlowStat:
     WINDOW_SIZE = 10  # The number of data stored for statistical calculations
     SCALING_PREFIXES = {'K': 1 / 1000, 'M': 1 / 1000000, 'G': 1 / 1000000000, None: 1}
+
+    @classmethod
+    def configure(cls, ch: config_handler.ConfigHandler, logger) -> None:
+        """
+        Configure common class values based on the config file.
+
+        :param ch: The config_handler object.
+        :param logger: Logger to log messages to.
+        """
+        # Optional fields
+        if "flowstat_window_size" in ch.config:
+            cls.WINDOW_SIZE = int(ch.config["flowstat_window_size"])
+            logger.debug("config: flowstat_window_size set to {}".format(cls.WINDOW_SIZE))
+        else:
+            logger.debug("config: flowstat_window_size not set")
 
     def __init__(self, time_step: int):
         """:param time_step: The number of seconds between two measurements."""
