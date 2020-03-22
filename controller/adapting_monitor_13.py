@@ -12,8 +12,8 @@ from qos_manager import QoSManager
 
 class AdaptingMonitor13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
-    time_step = 5  # The number of seconds between two stat request
-    flows_limits: Dict[FlowId, int] = {}  # Rate limits associated to different flows
+    TIME_STEP = 5  # The number of seconds between two stat request
+    FLOWS_LIMITS: Dict[FlowId, int] = {}  # Rate limits associated to different flows
 
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
@@ -42,10 +42,10 @@ class AdaptingMonitor13(app_manager.RyuApp):
         # Mandatory fields
         for flow in config["flows"]:
             try:
-                AdaptingMonitor13.flows_limits[FlowId.from_dict(flow)] = flow["base_ratelimit"]
+                AdaptingMonitor13.FLOWS_LIMITS[FlowId.from_dict(flow)] = flow["base_ratelimit"]
             except (TypeError, KeyError) as e:
                 self.logger.error("config: Invalid Flow object: {}. Reason: {}".format(flow, e))
-        if len(AdaptingMonitor13.flows_limits) <= 0:
+        if len(AdaptingMonitor13.FLOWS_LIMITS) <= 0:
             raise config_handler.ConfigError("config: No valid flow definition found.")
 
         QoSManager.CONTROLLER_BASEURL = config["controller_baseurl"]
@@ -59,8 +59,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
         # Optional fields
         if "time_step" in config:
-            AdaptingMonitor13.time_step = int(config["time_step"])
-            self.logger.debug("config: time_step set to {}".format(AdaptingMonitor13.time_step))
+            AdaptingMonitor13.TIME_STEP = int(config["time_step"])
+            self.logger.debug("config: time_step set to {}".format(AdaptingMonitor13.TIME_STEP))
         else:
             self.logger.debug("config: time_step not set")
 
@@ -77,8 +77,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
             self.logger.debug("config: interface_max_rate not set")
 
         if "flowstat_window_size" in config:
-            FlowStat.window_size = int(config["flowstat_window_size"])
-            self.logger.debug("config: flowstat_window_size set to {}".format(FlowStat.window_size))
+            FlowStat.WINDOW_SIZE = int(config["flowstat_window_size"])
+            self.logger.debug("config: flowstat_window_size set to {}".format(FlowStat.WINDOW_SIZE))
         else:
             self.logger.debug("config: flowstat_window_size not set")
 
@@ -90,8 +90,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
             if datapath.id not in self.datapaths:
                 self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
-                self.qos_managers[datapath.id] = QoSManager(datapath, AdaptingMonitor13.flows_limits, self.logger)
-                self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.time_step)
+                self.qos_managers[datapath.id] = QoSManager(datapath, AdaptingMonitor13.FLOWS_LIMITS, self.logger)
+                self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.TIME_STEP)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
                 self.logger.debug('unregister datapath: %016x', datapath.id)
@@ -103,7 +103,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
         while True:
             for dp in self.datapaths.values():
                 self._request_stats(dp)
-            hub.sleep(AdaptingMonitor13.time_step)
+            hub.sleep(AdaptingMonitor13.TIME_STEP)
 
     def _request_stats(self, datapath):
         self.logger.debug('send stats request: %016x', datapath.id)
