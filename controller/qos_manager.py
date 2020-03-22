@@ -12,9 +12,9 @@ class QoSManager:
     # The smallest difference in b/s that can result in rate limit changing in a queue. This
     # helps to perform histeresys in the adapting logic
     LIMIT_STEP = 2 * 10 ** 6
-    DEFAULT_MAX_RATE = -1
-    OVSDB_ADDR: str = ""
-    CONTROLLER_BASEURL: str = ""
+    DEFAULT_MAX_RATE = -1  # Max rate to be set on a queue if not told otherwise.
+    OVSDB_ADDR: str  # Address of the OVS database
+    CONTROLLER_BASEURL: str  # Base URL where the controller can be reached.
 
     @classmethod
     def configure(cls, ch: config_handler.ConfigHandler, logger) -> None:
