@@ -47,6 +47,11 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 self.logger.error("config: Invalid Flow object: {}. Reason: {}".format(flow, e))
         if len(AdaptingMonitor13.flows_limits) <= 0:
             raise config_handler.ConfigError("config: No valid flow definition found.")
+        if type(config["ovsdb_addr"]) == str:
+            QoSManager.OVSDB_ADDR = config["ovsdb_addr"]
+            self.logger.debug("config: ovsdb_addr set to {}".format(QoSManager.OVSDB_ADDR))
+        else:
+            raise TypeError("config: ovsdb_addr must be string")
 
         # Optional fields
         if "time_step" in config:

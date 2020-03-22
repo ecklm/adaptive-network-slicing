@@ -13,6 +13,7 @@ class QoSManager:
     # helps to perform histeresys in the adapting logic
     LIMIT_STEP = 2 * 10 ** 6
     DEFAULT_MAX_RATE = -1
+    OVSDB_ADDR: str = ""
 
     def __init__(self, datapath: controller.Datapath, flows_with_init_limits: Dict[FlowId, int], logger):
         self.__datapath = datapath
@@ -38,7 +39,7 @@ class QoSManager:
         This MUST be called once before sending configuration commands.
         """
         r = requests.put("http://localhost:8080/v1.0/conf/switches/%016x/ovsdb_addr" % self.__datapath.id,
-                         data='"tcp:192.0.2.20:6632"',
+                         data='"{}"'.format(QoSManager.OVSDB_ADDR),
                          headers={'Content-Type': 'application/x-www-form-urlencoded'})
         self.log_rest_result(r)
 
