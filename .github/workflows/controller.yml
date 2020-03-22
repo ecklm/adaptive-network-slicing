@@ -42,3 +42,22 @@ jobs:
         with:
           file_or_dir: controller/
 
+  unit_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        working-directory: controller/
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run tests with pytest
+        working-directory: controller/
+        run: |
+          python -m pip install --upgrade pytest
+          ./test.py
+
