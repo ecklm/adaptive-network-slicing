@@ -6,7 +6,7 @@ class ConfigError(KeyError):
 
 
 class ConfigHandler:
-    MANDATORY_FIELDS = ["flows", "ovsdb_addr"]
+    MANDATORY_FIELDS = ["flows", "controller_baseurl", "ovsdb_addr"]
 
     def __init__(self, config_path: str):
         """

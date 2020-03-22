@@ -10,6 +10,7 @@ flows:
   - ipv4_dst: 10.0.0.1
     udp_dst: 5003
     base_ratelimit: 25000000
+controller_baseurl: 'http://localhost:8080'
 ovsdb_addr: 'tcp:192.0.2.20:6632'
 
 ## Optional values
