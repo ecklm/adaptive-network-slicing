@@ -1,4 +1,5 @@
 ---
+## Mandatory values
 flows:
   - ipv4_dst: 10.0.0.1
     udp_dst: 5009
@@ -10,6 +11,9 @@ flows:
     udp_dst: 5003
     base_ratelimit: 25000000
 ovsdb_addr: 'tcp:192.0.2.20:6632'
+
+## Optional values
 # time_step: 2
 # limit_step: 2500000
 # interface_max_rate: 5000000
+# flowstat_window_size: 5

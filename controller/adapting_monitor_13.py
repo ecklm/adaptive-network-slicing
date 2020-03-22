@@ -72,6 +72,12 @@ class AdaptingMonitor13(app_manager.RyuApp):
         else:
             self.logger.debug("config: interface_max_rate not set")
 
+        if "flowstat_window_size" in config:
+            FlowStat.window_size = int(config["flowstat_window_size"])
+            self.logger.debug("config: flowstat_window_size set to {}".format(FlowStat.window_size))
+        else:
+            self.logger.debug("config: flowstat_window_size not set")
+
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def _state_change_handler(self, ev):
