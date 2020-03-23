@@ -59,5 +59,4 @@ jobs:
         working-directory: controller/
         run: |
           python -m pip install --upgrade pytest
-          ./test.py
-
+          ./test.py --verbose
