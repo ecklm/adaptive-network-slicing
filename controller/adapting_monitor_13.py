@@ -18,7 +18,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
 
-        self.configure("config.yml", self.logger)
+        self.configure("configs/default.yml", self.logger)
 
         self.datapaths = {}
         self.qos_managers: Dict[int, QoSManager] = {}  # Key: datapath id

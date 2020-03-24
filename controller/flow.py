@@ -50,6 +50,21 @@ class FlowStat:
         self.time_step = time_step
 
     def put(self, val: int):
+        """
+        Put data in the list for calculating statistics.
+
+        :param val: Must be a positive integer and greater than or equal to the last value.
+        :raises ValueError: If `val` is semantically incorrect.
+        """
+        if val < 0:
+            raise ValueError("Values in need to be positive. Got {}".format(val))
+        try:
+            if val < self.data[-1]:
+                raise ValueError("Data must show monotonic increase. Passed data is smaller than last one. []".format(
+                    [self.data[-1], val])
+                )
+        except IndexError:
+            pass
         if len(self.data) < FlowStat.WINDOW_SIZE:
             self.data.append(val)
         else:
@@ -57,7 +72,7 @@ class FlowStat:
 
     def get_avg(self, prefix: str = None) -> float:
         """
-        Get the average number of bytes transmitted during the last `WINDOW_SIZE` number of measurements.
+        Get the average number of bytes per measurement during the last `WINDOW_SIZE` number of measurements.
 
         :param prefix: A prefix to scale the result with. See possible values in `FlowStat.SCALING_PREFIXES`.
         """
@@ -130,7 +145,19 @@ class FlowStatManager:
         return self.stats[flow].get_avg_speed_bps(prefix)
 
     def export_avg_speeds(self, prefix: str = None) -> Dict[FlowId, float]:
+        """
+        Export the FlowStats associated to FlowIds.
+
+        :param prefix: See `FlowStat.get_avg` parameter documentation.
+        :return: A Dict of {FlowId, avg_speed}.
+        """
         return {k: v.get_avg_speed(prefix) for (k, v) in self.stats.items()}
 
     def export_avg_speeds_bps(self, prefix: str = None) -> Dict[FlowId, float]:
+        """
+        Export the FlowStats associated to flowIds.
+
+        :param prefix: See `FlowStat.get_avg` parameter documentation.
+        :return: A Dict of {FlowId, avg_speed_bps}.
+        """
         return {k: v.get_avg_speed_bps(prefix) for (k, v) in self.stats.items()}

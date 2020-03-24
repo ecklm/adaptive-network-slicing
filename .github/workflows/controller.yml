@@ -5,7 +5,7 @@ name: Test controller
 
 on:
   push:
-    paths: [ 'controller/**.py', 'controller/**.yml' ]
+    paths: [ 'controller/**.py', 'controller/configs/**.yml' ]
 
 
 jobs:
@@ -40,5 +40,23 @@ jobs:
       - name: Check configs that are intended to be correct
         uses: ibiqlik/action-yamllint@v1.0.0
         with:
-          file_or_dir: controller/
+          file_or_dir: controller/configs/
 
+  unit_tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        working-directory: controller/
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run tests with pytest
+        working-directory: controller/
+        run: |
+          python -m pip install --upgrade pytest
+          ./test.py --verbose
