@@ -30,7 +30,7 @@ def test_flowid_from_dict_incorrect_field():
 
 
 # ====== FlowStat tests ======
-ch = config_handler.ConfigHandler("../config.yml")
+ch = config_handler.ConfigHandler("configs/full.yml")
 FlowStat.configure(ch, logging)
 
 
