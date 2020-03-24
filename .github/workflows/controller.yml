@@ -5,7 +5,7 @@ name: Test controller
 
 on:
   push:
-    paths: [ 'controller/**.py', 'controller/**.yml' ]
+    paths: [ 'controller/**.py', 'controller/configs/**.yml' ]
 
 
 jobs:
@@ -40,7 +40,7 @@ jobs:
       - name: Check configs that are intended to be correct
         uses: ibiqlik/action-yamllint@v1.0.0
         with:
-          file_or_dir: controller/
+          file_or_dir: controller/configs/
 
   unit_tests:
     runs-on: ubuntu-latest
