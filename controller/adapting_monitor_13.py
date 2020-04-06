@@ -4,6 +4,7 @@ from ryu.controller.handler import DEAD_DISPATCHER, MAIN_DISPATCHER
 from ryu.controller.handler import set_ev_cls
 from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_3
+from os import environ as env
 
 import config_handler
 from flow import *
@@ -18,7 +19,10 @@ class AdaptingMonitor13(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
 
-        self.configure("configs/default.yml", self.logger)
+        config_file = env.get("CONFIG_FILE")
+        if config_file is None:
+            config_file = "configs/default.yml"
+        self.configure(config_file, self.logger)
 
         self.datapaths = {}
         self.qos_managers: Dict[int, QoSManager] = {}  # Key: datapath id
