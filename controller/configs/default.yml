@@ -1,15 +1,21 @@
 ---
 ## Mandatory values
 flows:
-  - ipv4_dst: 10.0.0.1
-    udp_dst: 5009
-    base_ratelimit: 5000000
-  - ipv4_dst: 10.0.0.8
-    udp_dst: 5002
-    base_ratelimit: 15000000
-  - ipv4_dst: 10.0.0.1
+  # f1: A -> UE1
+  - ipv4_dst: 10.0.0.11
+    udp_dst: 5001
+    base_ratelimit: 5000000 # 5Mbps
+
+  # f2: A -> UE3
+  - ipv4_dst: 10.0.0.13
     udp_dst: 5003
-    base_ratelimit: 25000000
+    base_ratelimit: 15000000 # 15 Mbps
+
+  # f3: A -> UE2
+  - ipv4_dst: 10.0.0.12
+    udp_dst: 5002
+    base_ratelimit: 25000000 # 25 Mbps
+
 controller_baseurl: 'http://localhost:8080'
 ovsdb_addr: 'tcp:192.0.2.20:6632'
 
