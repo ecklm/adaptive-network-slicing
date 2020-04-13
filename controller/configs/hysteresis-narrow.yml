@@ -1,0 +1,26 @@
+---
+## Mandatory values
+flows:
+  # f1: B -> UE1
+  - ipv4_dst: 10.0.0.11
+    udp_dst: 5001
+    base_ratelimit: 5000000 # 5Mbps
+
+  # f2: B -> UE3
+  - ipv4_dst: 10.0.0.13
+    udp_dst: 5003
+    base_ratelimit: 15000000 # 15 Mbps
+
+  # f3: C -> UE2
+  - ipv4_dst: 10.0.0.12
+    udp_dst: 5002
+    base_ratelimit: 25000000 # 25 Mbps
+
+controller_baseurl: 'http://localhost:8080'
+ovsdb_addr: 'tcp:192.0.2.20:6632'
+
+## Optional values
+# time_step: 2
+limit_step: 1000000
+# interface_max_rate: 5000000
+# flowstat_window_size: 5
