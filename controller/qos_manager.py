@@ -10,7 +10,7 @@ from flow import *
 
 class QoSManager:
     # The smallest difference in b/s that can result in rate limit changing in a queue. This
-    # helps to perform histeresys in the adapting logic
+    # helps to perform hysteresis in the adapting logic
     LIMIT_STEP = 2 * 10 ** 6
     DEFAULT_MAX_RATE = -1  # Max rate to be set on a queue if not told otherwise.
     OVSDB_ADDR: str  # Address of the OVS database
@@ -92,7 +92,7 @@ class QoSManager:
 
     def get_queues(self):
         """
-        Set queus in the switch.
+        Get queues in the switch.
 
         WARNING: This request MUST be run some time after setting the OVSDB address to the controller.
         If it is run too soon, the controller responds with a failure.
