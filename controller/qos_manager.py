@@ -1,6 +1,7 @@
 import json
 from copy import deepcopy
 from typing import Tuple
+from math import ceil
 
 import requests
 from ryu.controller import controller
@@ -76,6 +77,7 @@ class QoSManager:
         self.log_rest_result(r)
 
     def set_queues(self):
+        """Set queues on switches so that limits can be set on them."""
         # Extract port names and drop internal port named equivalently as the switch
         ports = sorted([port.name.decode('utf-8') for port in self.__datapath.ports.values()])[1:]
         self.__logger.debug("Ports to be configured: {}".format(ports))
@@ -103,25 +105,33 @@ class QoSManager:
 
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
         modified = False
-        unused_candidates = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0] / 2]
-        used_candidates = [k for k, v in flowstats.items() if v > self.FLOWS_INIT_LIMITS[k][0] / 2]
-        self.__logger.debug("unused:\t%s\nused:\t%s\nrest (virtually impossible):\t%s" %
-                            (unused_candidates,
-                             used_candidates,
-                             [k for k, v in flowstats.items() if v == self.FLOWS_INIT_LIMITS[k][0] / 2]))
+        unexploited_flows = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0]]
+        full_flows = [k for k, v in flowstats.items() if v >= self.FLOWS_INIT_LIMITS[k][0]]
+        self.__logger.debug("unexploited:\t%s\nfull:\t%s" % (unexploited_flows, full_flows))
+
         overall_gain = 0  # b/s which is available extra after rate reduction
-        for k in unused_candidates:
+
+        for k in unexploited_flows:
+            load = flowstats[k]
             original_limit = self.FLOWS_INIT_LIMITS[k][0]
-            if self._update_limit(k, original_limit / 2):
+            bw_step = 0.1 * original_limit  # The granularity in which adaptation happens
+            newlimit = max(ceil(load / bw_step) * bw_step, original_limit / 4)
+
+            # Update the flows bandwidth limit only if _both the load and the new limit_ are further away from the
+            # current limit than LIMIT_STEP. This dual condition is to avoid flapping of bandwidth settings when the
+            # load is around an adaptation point and updating limits on flows with little resource assigned.
+            if abs(load - self.get_current_limit(k)) >= QoSManager.LIMIT_STEP and \
+                    self._update_limit(k,
+                                       newlimit):  # This only runs if the first condition is true -> should be okay
                 modified = True
             overall_gain += original_limit - self.get_current_limit(k)
 
         try:
-            available_per_host = overall_gain / len(used_candidates)
+            gain_per_flow = overall_gain / len(full_flows)
         except ZeroDivisionError:
-            available_per_host = 0
-        for k in used_candidates:
-            if (self._update_limit(k, self.FLOWS_INIT_LIMITS[k][0] + available_per_host)):
+            gain_per_flow = 0
+        for k in full_flows:
+            if self._update_limit(k, self.FLOWS_INIT_LIMITS[k][0] + gain_per_flow):
                 modified = True
         if modified:
             self.set_queues()
