@@ -99,27 +99,24 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_logger(self, ev):
-        body = ev.msg.body
-        dpid = ev.msg.datapath.id
+        # Print log header
+        self.logger.info("")
+        self.logger.info('%16s %10s %7s %16s %20s' %
+                         ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current-limit (Mb/s)'))
+        self.logger.info('%s %s %s %s %s' %
+                         ('-' * 16, '-' * 10, '-' * 7, '-' * 16, '-' * 20))
 
-        flowstats = sorted([flow for flow in body if flow.priority == 1 and flow.table_id == 0],
-                           key=lambda flow: (flow.match['ipv4_dst'], flow.match['udp_dst']))
-        if len(flowstats) > 0:
-            self.logger.info("")
-            self.logger.info('%16s %10s %7s %8s %8s %11s %16s %20s' %
-                             ('datapath', 'ipv4-dst', 'udp-dst', 'queue-id', 'packets',
-                              'bytes', 'avg-speed (Mb/s)', 'current-limit (Mb/s)'))
-            self.logger.info('%s %s %s %s %s %s %s %s' %
-                             ('-' * 16, '-' * 10, '-' * 7, '-' * 8, '-' * 8, '-' * 11, '-' * 16, '-' * 20))
-        for stat in flowstats:
-            flow = FlowId(stat.match['ipv4_dst'], stat.match['udp_dst'])
-            avg_speed = self.stats[dpid].get_avg_speed_bps(flow, 'M')
-            self.logger.info('%016x %10s %7d %8d %8d %11d %16.2f %20.2f',
-                             dpid,
-                             stat.match['ipv4_dst'], stat.match['udp_dst'],
-                             stat.instructions[0].actions[0].queue_id,
-                             stat.packet_count, stat.byte_count, avg_speed,
-                             self.qos_managers[dpid].get_current_limit(flow) / 10 ** 6)
+        # Collect and order entries
+        statentries = []
+        for dpid, flowstats in self.stats.items():
+            for flow, avg_speed in flowstats.export_avg_speeds_bps('M').items():
+                statentries.append((dpid, flow.ipv4_dst, flow.udp_dst, avg_speed,
+                                    self.qos_managers[dpid].get_current_limit(flow) / 10 ** 6))
+        statentries = sorted(statentries, key=lambda entry: (entry[1:3], entry[0]))
+
+        # Log statistics
+        for entry in statentries:
+            self.logger.info('%016x %10s %7d %16.2f %20.2f' % entry)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
