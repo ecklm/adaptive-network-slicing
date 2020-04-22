@@ -169,6 +169,14 @@ class QoSManager:
         """
         return self.flows_limits[flow][0]
 
+    def get_initial_limit(self, flow: FlowId) -> int:
+        """
+        Get initial limit for a specific flow.
+
+        :return: The initial rate limit applied to `flow` in bits/s.
+        """
+        return self.FLOWS_INIT_LIMITS[flow][0]
+
     def _update_limit(self, flow: FlowId, newlimit, force: bool = False) -> bool:
         """
         Update the limit of a queue related to `flow`.

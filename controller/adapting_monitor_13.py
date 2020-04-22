@@ -106,22 +106,24 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
         # Print log header
         self.logger.info("")
-        self.logger.info('%16s %10s %7s %16s %20s' %
-                         ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current-limit (Mb/s)'))
-        self.logger.info('%s %s %s %s %s' %
-                         ('-' * 16, '-' * 10, '-' * 7, '-' * 16, '-' * 20))
+        self.logger.info('%16s %10s %7s %16s %20s %20s' %
+                         ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current limit (Mb/s)',
+                          'initial limit (Mb/s)'))
+        self.logger.info('%s %s %s %s %s %s' %
+                         ('-' * 16, '-' * 10, '-' * 7, '-' * 16, '-' * 20, '-' * 20))
 
         # Collect and order entries
         statentries = []
         for dpid, flowstats in self.stats.items():
             for flow, avg_speed in flowstats.export_avg_speeds_bps('M').items():
                 statentries.append((dpid, flow.ipv4_dst, flow.udp_dst, avg_speed,
-                                    self.qos_managers[dpid].get_current_limit(flow) / 10 ** 6))
+                                    self.qos_managers[dpid].get_current_limit(flow) / 10 ** 6,
+                                    self.qos_managers[dpid].get_initial_limit(flow) / 10 ** 6))
         statentries = sorted(statentries, key=lambda entry: (entry[1:3], entry[0]))
 
         # Log statistics
         for entry in statentries:
-            self.logger.info('%016x %10s %7d %16.2f %20.2f' % entry)
+            self.logger.info('%016x %10s %7d %16.2f %20.2f %20.2f' % entry)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
