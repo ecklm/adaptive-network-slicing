@@ -99,6 +99,11 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_logger(self, ev):
+        if ev.msg.datapath.id != 1:
+            # This is a hack to achieve that statistic logs only get printed once in a period of updates. This hack
+            # assumes that there is a switch using datapath id = 1 and uses it as the 'period signal'.
+            return
+
         # Print log header
         self.logger.info("")
         self.logger.info('%16s %10s %7s %16s %20s' %
