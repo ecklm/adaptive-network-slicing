@@ -75,6 +75,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
             if datapath.id not in self.datapaths:
                 self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
+                # Ports list always has one element with the name of the switch itself.
+                datapath.cname = sorted([port.name.decode('utf-8') for port in datapath.ports.values()])[0]
                 self.qos_managers[datapath.id] = QoSManager(datapath, AdaptingMonitor13.FLOWS_LIMITS, self.logger)
                 self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.TIME_STEP)
         elif ev.state == DEAD_DISPATCHER:
@@ -106,24 +108,27 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
         # Print log header
         self.logger.info("")
-        self.logger.info('%16s %10s %7s %16s %20s %20s' %
+        self.logger.info('%10s %10s %7s %16s %20s %20s' %
                          ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current limit (Mb/s)',
                           'initial limit (Mb/s)'))
         self.logger.info('%s %s %s %s %s %s' %
-                         ('-' * 16, '-' * 10, '-' * 7, '-' * 16, '-' * 20, '-' * 20))
+                         ('-' * 10, '-' * 10, '-' * 7, '-' * 16, '-' * 20, '-' * 20))
 
         # Collect and order entries
         statentries = []
         for dpid, flowstats in self.stats.items():
             for flow, avg_speed in flowstats.export_avg_speeds_bps('M').items():
-                statentries.append((dpid, flow.ipv4_dst, flow.udp_dst, avg_speed,
+                statentries.append((dpid, self.datapaths[dpid].cname,
+                                    flow.ipv4_dst, flow.udp_dst,
+                                    avg_speed,
                                     self.qos_managers[dpid].get_current_limit(flow) / 10 ** 6,
                                     self.qos_managers[dpid].get_initial_limit(flow) / 10 ** 6))
-        statentries = sorted(statentries, key=lambda entry: (entry[1:3], entry[0]))
+        # Sort by flows first and then by dpid (=switch)
+        statentries = sorted(statentries, key=lambda entry: (entry[2:4], entry[0]))
 
         # Log statistics
         for entry in statentries:
-            self.logger.info('%016x %10s %7d %16.2f %20.2f %20.2f' % entry)
+            self.logger.info('%10s %10s %7d %16.2f %20.2f %20.2f' % entry[1:])  # [1:] -> without dpid
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
