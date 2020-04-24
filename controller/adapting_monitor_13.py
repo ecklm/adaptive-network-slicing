@@ -73,7 +73,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
         datapath = ev.datapath
         if ev.state == MAIN_DISPATCHER:
             if datapath.id not in self.datapaths:
-                self.logger.debug('register datapath: %016x', datapath.id)
+                self.logger.debug('adapting-monitor: register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
                 # Ports list always has one element with the name of the switch itself.
                 datapath.cname = sorted([port.name.decode('utf-8') for port in datapath.ports.values()])[0]
@@ -81,7 +81,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.TIME_STEP)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
-                self.logger.debug('unregister datapath: %016x', datapath.id)
+                self.logger.debug('adapting-monitor: unregister datapath: %016x', datapath.id)
                 del self.datapaths[datapath.id]
                 del self.qos_managers[datapath.id]
                 del self.stats[datapath.id]
@@ -93,7 +93,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
             hub.sleep(AdaptingMonitor13.TIME_STEP)
 
     def _request_stats(self, datapath):
-        self.logger.debug('send stats request: %016x', datapath.id)
+        self.logger.debug('adapting-monitor: send stats request: %016x', datapath.id)
         parser = datapath.ofproto_parser
 
         req = parser.OFPFlowStatsRequest(datapath)

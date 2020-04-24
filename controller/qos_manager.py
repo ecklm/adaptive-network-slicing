@@ -74,13 +74,13 @@ class QoSManager:
         r = requests.put("%s/v1.0/conf/switches/%016x/ovsdb_addr" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id),
                          data='"{}"'.format(QoSManager.OVSDB_ADDR),
                          headers={'Content-Type': 'application/x-www-form-urlencoded'})
-        self.log_rest_result(r)
+        self.log_http_response(r)
 
     def set_queues(self):
         """Set queues on switches so that limits can be set on them."""
         # Extract port names and drop internal port named equivalently as the switch
         ports = sorted([port.name.decode('utf-8') for port in self.__datapath.ports.values()])[1:]
-        self.__logger.debug("Ports to be configured: {}".format(ports))
+        self.__logger.debug("qosmanager: Switchports to be configured: {}".format(ports))
         queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
         for port in ports:
             r = requests.post("%s/qos/queue/%016x" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id),
@@ -90,7 +90,7 @@ class QoSManager:
                                   "queues":
                                       [{"max_rate": str(limit)} for limit in queue_limits]
                               }))
-            self.log_rest_result(r)
+            self.log_http_response(r)
 
     def get_queues(self):
         """
@@ -101,13 +101,13 @@ class QoSManager:
         Calling this function right after setting the OVSDB address will result in occasional failures.
         """
         r = requests.get("%s/qos/queue/%016x" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id))
-        self.log_rest_result(r)
+        self.log_http_response(r)
 
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
         modified = False
         unexploited_flows = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0]]
         full_flows = [k for k, v in flowstats.items() if v >= self.FLOWS_INIT_LIMITS[k][0]]
-        self.__logger.debug("unexploited:\t%s\nfull:\t%s" % (unexploited_flows, full_flows))
+        self.__logger.debug("qosmanager:\n\tunexploited:\t%s\n\tfull:\t%s" % (unexploited_flows, full_flows))
 
         overall_gain = 0  # b/s which is available extra after rate reduction
 
@@ -148,7 +148,7 @@ class QoSManager:
                                   },
                                   "actions": {"queue": self.flows_limits[k][1]}
                               }))
-            self.log_rest_result(r)
+            self.log_http_response(r)
 
     def get_rules(self):
         """
@@ -159,7 +159,7 @@ class QoSManager:
         event.
         """
         r = requests.get("%s/qos/rules/%016x" % (QoSManager.CONTROLLER_BASEURL, self.__datapath.id))
-        self.log_rest_result(r)
+        self.log_http_response(r)
 
     def get_current_limit(self, flow: FlowId) -> int:
         """
@@ -195,7 +195,7 @@ class QoSManager:
         else:
             return False
 
-    def log_rest_result(self, r: requests.Response) -> None:
+    def log_http_response(self, r: requests.Response) -> None:
         if r.status_code >= 300 or \
                 -1 != r.text.find("failure"):
             log = self.__logger.error
@@ -204,5 +204,5 @@ class QoSManager:
         try:
             log("{} - {}".format(r.status_code,
                                  json.dumps(r.json(), indent=4, sort_keys=True)))
-        except ValueError:
+        except ValueError:  # the response is not JSON
             log("{} - {}".format(r.status_code, r.text))
