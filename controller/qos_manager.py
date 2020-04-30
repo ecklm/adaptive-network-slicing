@@ -107,6 +107,18 @@ class QoSManager:
         r = requests.get("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid))
         self.log_http_response(r)
 
+    def delete_queues(self, dpid: int = "all"):
+        """
+        Delete queues from the switch.
+
+        :param dpid: Optional numeric parameter to specify on which switch the queues should be deleted. Defaults to
+        'all'.
+        """
+        if type(dpid) == int:
+            dpid = "%016x" % dpid
+        r = requests.delete("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid))
+        self.log_http_response(r)
+
     def adapt_queues(self, flowstats: Dict[FlowId, float]):
         modified = False
         unexploited_flows = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0]]
@@ -169,11 +181,26 @@ class QoSManager:
         which triggers every function subscribed to the ofp_event.EventOFPFlowStatsReply
         event.
 
-        :param dpid: Optional numeric parameter to specify on which switch the rules should be set. Defaults to 'all'.
+        :param dpid: Optional numeric parameter to specify from which switch the rules should be retrieved. Defaults to
+        'all'.
         """
         if type(dpid) == int:
             dpid = "%016x" % dpid
         r = requests.get("%s/qos/rules/%s" % (QoSManager.CONTROLLER_BASEURL, dpid))
+        self.log_http_response(r)
+
+    def delete_rules(self, dpid: int = "all"):
+        """
+        Delete rules already installed in the switch.
+
+        :param dpid: Optional numeric parameter to specify on which switch the rules should be deleted. Defaults to
+        'all'.
+        """
+        if type(dpid) == int:
+            dpid = "%016x" % dpid
+        r = requests.delete("%s/qos/rules/%s" % (QoSManager.CONTROLLER_BASEURL, dpid),
+                            headers={'Content-Type': 'application/json'},
+                            data=json.dumps({"qos_id": "all"}))
         self.log_http_response(r)
 
     def get_current_limit(self, flow: FlowId) -> int:
