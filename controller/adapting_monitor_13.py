@@ -27,13 +27,19 @@ class AdaptingMonitor13(app_manager.RyuApp):
         self.datapaths = {}
         self.qos_manager = QoSManager(AdaptingMonitor13.FLOWS_LIMITS, self.logger)
         self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
+
+        self.__do_monitor = True  # Exit condition for the monitoring thread.
         self.monitor_thread = hub.spawn(self._monitor)
 
     def _monitor(self):
-        while True:
+        while self.__do_monitor is True:
             for dp in self.datapaths.values():
                 self._request_stats(dp)
             hub.sleep(AdaptingMonitor13.TIME_STEP)
+        self.logger.debug("adapting_monitor: Network monitoring stopped.")
+
+    def close(self):
+        self.__do_monitor = False
 
     @classmethod
     def configure(cls, config_path: str, logger) -> None:
