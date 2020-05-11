@@ -1,3 +1,5 @@
+import logging
+
 from dataclasses import dataclass
 from typing import Dict
 
@@ -30,13 +32,14 @@ class FlowStat:
     SCALING_PREFIXES = {'K': 1 / 1000, 'M': 1 / 1000000, 'G': 1 / 1000000000, None: 1}
 
     @classmethod
-    def configure(cls, ch: config_handler.ConfigHandler, logger) -> None:
+    def configure(cls, ch: config_handler.ConfigHandler) -> None:
         """
         Configure common class values based on the config file.
 
         :param ch: The config_handler object.
-        :param logger: Logger to log messages to.
         """
+        logger = logging.getLogger("flowstat")
+
         # Optional fields
         if "flowstat_window_size" in ch.config:
             cls.WINDOW_SIZE = int(ch.config["flowstat_window_size"])

@@ -1,4 +1,5 @@
 from os import environ as env
+import logging
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -22,14 +23,16 @@ class AdaptingMonitor13(app_manager.RyuApp):
         config_file = env.get("CONFIG_FILE")
         if config_file is None:
             config_file = "configs/default.yml"
-        self.configure(config_file, self.logger)
+        self.configure(config_file)
 
         self.datapaths = {}
-        self.qos_manager = QoSManager(AdaptingMonitor13.FLOWS_LIMITS, self.logger)
+        self.qos_manager = QoSManager(AdaptingMonitor13.FLOWS_LIMITS)
         self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
 
         self.__do_monitor = True  # Exit condition for the monitoring thread.
         self.monitor_thread = hub.spawn(self._monitor)
+
+        self.logger = logging.getLogger("adapting_monitor")
 
     def _monitor(self):
         while self.__do_monitor is True:
@@ -42,7 +45,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
         self.__do_monitor = False
 
     @classmethod
-    def configure(cls, config_path: str, logger) -> None:
+    def configure(cls, config_path: str) -> None:
         """
         Configure the application based on the values in the file available at `config_path`.
 
@@ -50,8 +53,9 @@ class AdaptingMonitor13(app_manager.RyuApp):
         with the config file, as it should definitely result in application failure.
 
         :param config_path: Path to the configuration file
-        :param logger: Logger to log messages to.
         """
+        logger = logging.getLogger("adapting_monitor")
+
         ch = config_handler.ConfigHandler(config_path)
         # Don't catch exception on purpose, bad config => Not working app
 
@@ -76,8 +80,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
             logger.debug("config: time_step not set")
 
         # Configure other classes
-        QoSManager.configure(ch, logger)
-        FlowStat.configure(ch, logger)
+        QoSManager.configure(ch)
+        FlowStat.configure(ch)
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])

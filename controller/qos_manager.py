@@ -1,9 +1,10 @@
 import json
+import logging
+import requests
+
 from copy import deepcopy
 from math import ceil
 from typing import Tuple
-
-import requests
 
 from flow import *
 
@@ -17,13 +18,14 @@ class QoSManager:
     CONTROLLER_BASEURL: str  # Base URL where the controller can be reached.
 
     @classmethod
-    def configure(cls, ch: config_handler.ConfigHandler, logger) -> None:
+    def configure(cls, ch: config_handler.ConfigHandler) -> None:
         """
         Configure common class values based on the config file.
 
         :param ch: The config_handler object.
-        :param logger: Logger to log messages to.
         """
+        logger = logging.getLogger("qos_manager")
+
         # Mandatory fields
         cls.CONTROLLER_BASEURL = ch.config["controller_baseurl"]
         logger.info("config: controller_baseurl set to {}".format(cls.CONTROLLER_BASEURL))
@@ -47,7 +49,7 @@ class QoSManager:
         else:
             logger.debug("config: interface_max_rate not set")
 
-    def __init__(self, flows_with_init_limits: Dict[FlowId, int], logger):
+    def __init__(self, flows_with_init_limits: Dict[FlowId, int]):
         self.flows_limits: Dict[FlowId, Tuple[int, int]] = {}  # This will hold the actual values updated
 
         # Start from qnum = 1 so that the matches to the first rule does not get the same queue as non-matches
@@ -57,7 +59,7 @@ class QoSManager:
         self.FLOWS_INIT_LIMITS: Dict[FlowId, Tuple[int, int]] = \
             deepcopy(self.flows_limits)  # This does not change, it contains the values of the ideal, "customer" case
 
-        self.__logger = logger
+        self.__logger = logging.getLogger("qos_manager")
 
     def set_ovsdb_addr(self, dpid: int):
         """
@@ -146,8 +148,8 @@ class QoSManager:
             gain_per_flow = overall_gain / len(full_flows)
         except ZeroDivisionError:
             gain_per_flow = 0
-        for k in full_flows:
-            if self._update_limit(k, self.FLOWS_INIT_LIMITS[k][0] + gain_per_flow):
+        for flow in full_flows:
+            if self._update_limit(flow, self.FLOWS_INIT_LIMITS[flow][0] + gain_per_flow):
                 modified = True
         if modified:
             self.set_queues()
