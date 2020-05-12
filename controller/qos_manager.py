@@ -82,16 +82,21 @@ class QoSManager:
         if type(dpid) == int:
             dpid = "%016x" % dpid
         queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
-        r = requests.post("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid),
-                          headers={'Content-Type': 'application/json'},
-                          data=json.dumps({
-                              # From doc: port_name is optional argument. If does not pass the port_name argument, all
-                              # ports are target for configuration.
-                              "type": "linux-htb", "max_rate": str(QoSManager.DEFAULT_MAX_RATE),
-                              "queues":
-                                  [{"max_rate": str(limit)} for limit in queue_limits]
-                          }))
-        self.log_http_response(r)
+        try:
+            r = requests.post("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid),
+                              headers={'Content-Type': 'application/json'},
+                              data=json.dumps({
+                                  # From doc: port_name is optional argument. If does not pass the port_name argument,
+                                  # all ports are target for configuration.
+                                  "type": "linux-htb", "max_rate": str(QoSManager.DEFAULT_MAX_RATE),
+                                  "queues":
+                                      [{"max_rate": str(limit)} for limit in queue_limits]
+                              }))
+            self.log_http_response(r)
+        except requests.exceptions.ConnectionError as err:
+            self.__logger.error(
+                    "qos_manager: Queue setting has failed. It has most likely be interrupted by another call. {}"
+                    .format(err))
 
     def get_queues(self, dpid: int = "all"):
         """
