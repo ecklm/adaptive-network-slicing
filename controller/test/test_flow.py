@@ -1,5 +1,3 @@
-import logging
-
 import pytest
 
 import config_handler
@@ -31,7 +29,7 @@ def test_flowid_from_dict_incorrect_field():
 
 # ====== FlowStat tests ======
 ch = config_handler.ConfigHandler("configs/full.yml")
-FlowStat.configure(ch, logging)
+FlowStat.configure(ch)
 
 
 # To be uncommented when there are fixed config files for testing
