@@ -20,6 +20,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
 
+        self.logger = logging.getLogger("adapting_monitor")
+
         config_file = env.get("CONFIG_FILE")
         if config_file is None:
             config_file = "configs/default.yml"
@@ -29,20 +31,16 @@ class AdaptingMonitor13(app_manager.RyuApp):
         self.qos_manager = QoSManager(AdaptingMonitor13.FLOWS_LIMITS)
         self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
 
-        self.__do_monitor = True  # Exit condition for the monitoring thread.
-        self.monitor_thread = hub.spawn(self._monitor)
-
-        self.logger = logging.getLogger("adapting_monitor")
+    def start(self):
+        super(AdaptingMonitor13, self).start()
+        self.threads.append(hub.spawn(self._monitor))
 
     def _monitor(self):
-        while self.__do_monitor is True:
+        while self.is_active:
             for dp in self.datapaths.values():
                 self._request_stats(dp)
             hub.sleep(AdaptingMonitor13.TIME_STEP)
         self.logger.debug("adapting_monitor: Network monitoring stopped.")
-
-    def close(self):
-        self.__do_monitor = False
 
     @classmethod
     def configure(cls, config_path: str) -> None:
