@@ -110,7 +110,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 all_ports = sorted([port.name.decode('utf-8') for port in datapath.ports.values()])
                 datapath.cname = all_ports[0]
                 datapath.ports = all_ports[1:]
-                self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.TIME_STEP)
+                self.stats[datapath.id] = FlowStatManager()
                 self.qos_manager.set_ovsdb_addr(datapath.id, blocking=True)
                 self.qos_manager.set_rules(datapath.id, blocking=True)
         elif ev.state == DEAD_DISPATCHER:
