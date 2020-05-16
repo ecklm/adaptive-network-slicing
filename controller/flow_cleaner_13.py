@@ -30,14 +30,12 @@ class FlowCleaner13(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER])
     def _register_datapath(self, ev):
-        if ev.datapath.id is None:
-            return
-        self.logger.debug('flow_cleaner: register datapath: %016x', ev.datapath.id)
-        self.__datapaths.add(ev.datapath.id)
+        if ev.datapath.id not in self.__datapaths:
+            self.logger.debug('flow_cleaner: register datapath: %016x', ev.datapath.id)
+            self.__datapaths.add(ev.datapath.id)
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [DEAD_DISPATCHER])
     def _unregister_datapath(self, ev):
-        if ev.datapath.id is None:
-            return
-        self.logger.debug('flow_cleaner: unregister datapath: %016x', ev.datapath.id)
-        self.__datapaths.remove(ev.datapath.id)
+        if ev.datapath.id in self.__datapaths:
+            self.logger.debug('flow_cleaner: unregister datapath: %016x', ev.datapath.id)
+            self.__datapaths.remove(ev.datapath.id)
