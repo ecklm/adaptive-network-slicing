@@ -1,10 +1,11 @@
 import json
 import logging
-import requests
-
 from copy import deepcopy
 from math import ceil
-from typing import Tuple
+from typing import Tuple, Type
+
+import requests
+import ryu.lib.hub
 
 from flow import *
 
@@ -94,9 +95,7 @@ class QoSManager:
                               }))
             self.log_http_response(r)
         except requests.exceptions.ConnectionError as err:
-            self.__logger.error(
-                    "qos_manager: Queue setting has failed. It has most likely be interrupted by another call. {}"
-                    .format(err))
+            self.__logger.error("qos_manager: Queue setting has failed. {}".format(err))
 
     def get_queues(self, dpid: int = "all"):
         """
@@ -126,7 +125,12 @@ class QoSManager:
         r = requests.delete("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid))
         self.log_http_response(r)
 
-    def adapt_queues(self, flowstats: Dict[FlowId, float]):
+    def _pre_adapt(self, flowstats: Dict[FlowId, float]) -> bool:
+        """
+        Calculate and locally update queue limits before sending updates to the switch.
+
+        :return: Whether queue update needs to be sent to the switches or not.
+        """
         modified = False
         unexploited_flows = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0]]
         full_flows = [k for k, v in flowstats.items() if v >= self.FLOWS_INIT_LIMITS[k][0]]
@@ -156,6 +160,10 @@ class QoSManager:
         for flow in full_flows:
             if self._update_limit(flow, self.FLOWS_INIT_LIMITS[flow][0] + gain_per_flow):
                 modified = True
+        return modified
+
+    def adapt_queues(self, flowstats: Dict[FlowId, float]):
+        modified = self._pre_adapt(flowstats)
         if modified:
             self.set_queues()
 
@@ -255,3 +263,53 @@ class QoSManager:
                                  json.dumps(r.json(), indent=4, sort_keys=True)))
         except ValueError:  # the response is not JSON
             log("{} - {}".format(r.status_code, r.text))
+
+
+class ThreadedQoSManager(QoSManager):
+    """Does the same thing as QoSManager, but wraps its functions to be thread safe."""
+
+    def __init__(self, flows_with_init_limits: Dict[FlowId, int],
+                 sem_cls: Type[ryu.lib.hub.Semaphore] = ryu.lib.hub.BoundedSemaphore,
+                 blocking: bool = False):
+        """
+        Initialise a QoSManager object with the necessary semaphore settings.
+
+        :param sem_cls: The class of the Semaphore to be used. Defaults to BoundedSemaphore by Ryu hub.
+        :param blocking: Sets whether acquire() call should be blocking or not. In the non-blocking case, the respective
+        function will simply be skipped. This can be overridden in the specific function calls.
+        """
+        super().__init__(flows_with_init_limits)
+        self.__logger = logging.getLogger("threaded_qos_manager")
+
+        self._resource_set_sem = sem_cls(1)
+        self._adapt_sem = sem_cls(1)
+        self._sem_blocking = blocking
+
+    def set_queues(self, dpid: int = "all", blocking: bool = None):
+        if blocking is None:
+            blocking = self._sem_blocking
+        sem_acquired = self._resource_set_sem.acquire(blocking)
+        self.__logger.debug("threaded_qos_manager: _resource_set_sem.acquire = %s" % sem_acquired)
+        if sem_acquired is False:
+            self.__logger.debug("threaded_qos_manager: Skipping queue setting due to other pending operation.")
+            return
+
+        ret = super().set_queues(dpid)
+
+        self._resource_set_sem.release(blocking)
+        return ret
+
+    def adapt_queues(self, flowstats: Dict[FlowId, float], blocking: bool = None):
+        if blocking is None:
+            blocking = self._sem_blocking
+        sem_acquired = self._adapt_sem.acquire(blocking)
+        self.__logger.debug("threaded_qos_manager: _adapt_sem.acquire = %s" % sem_acquired)
+        if sem_acquired is False:
+            self.__logger.debug("threaded_qos_manager: Skipping queue adaptation due to other pending operation.")
+            return
+
+        modified = self._pre_adapt(flowstats)
+        if modified:
+            self.set_queues(blocking=True)
+
+        self._adapt_sem.release(blocking)

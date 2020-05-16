@@ -1,5 +1,5 @@
-from os import environ as env
 import logging
+from os import environ as env
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
@@ -9,7 +9,7 @@ from ryu.lib import hub
 from ryu.ofproto import ofproto_v1_3
 
 from flow import *
-from qos_manager import QoSManager
+from qos_manager import QoSManager, ThreadedQoSManager
 
 
 class AdaptingMonitor13(app_manager.RyuApp):
@@ -28,19 +28,35 @@ class AdaptingMonitor13(app_manager.RyuApp):
         self.configure(config_file)
 
         self.datapaths = {}
-        self.qos_manager = QoSManager(AdaptingMonitor13.FLOWS_LIMITS)
+        self.qos_manager = ThreadedQoSManager(AdaptingMonitor13.FLOWS_LIMITS)
         self.stats: Dict[int, FlowStatManager] = {}  # Key: datapath id
 
     def start(self):
         super(AdaptingMonitor13, self).start()
         self.threads.append(hub.spawn(self._monitor))
+        self.threads.append(hub.spawn(self._adapt))
 
     def _monitor(self):
         while self.is_active:
-            for dp in self.datapaths.values():
+            for dp in list(self.datapaths.values()):
                 self._request_stats(dp)
             hub.sleep(AdaptingMonitor13.TIME_STEP)
-        self.logger.debug("adapting_monitor: Network monitoring stopped.")
+        self.logger.info("adapting_monitor: Network monitoring stopped.")
+
+    def _adapt(self):
+        while self.is_active:
+            # To make adaptation global to the network, the QoSManager need to see a projection of flowstats that has
+            # the maximum measured value for each flow, thus accumulating the measurements from all datapaths.
+            flowstat_max_per_flow: Dict[FlowId, float] = {}
+            for fsm in list(self.stats.values()):
+                for fid, avg_speed in fsm.export_avg_speeds_bps().items():
+                    if fid not in flowstat_max_per_flow or \
+                            avg_speed > flowstat_max_per_flow[fid]:
+                        flowstat_max_per_flow[fid] = avg_speed
+            if flowstat_max_per_flow:
+                self.qos_manager.adapt_queues(flowstat_max_per_flow, False)
+            hub.sleep(AdaptingMonitor13.TIME_STEP)
+        self.logger.info("adapting_monitor: Queue adaptation loop stopped.")
 
     @classmethod
     def configure(cls, config_path: str) -> None:
@@ -97,7 +113,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.TIME_STEP)
                 self.qos_manager.set_ovsdb_addr(datapath.id)
                 self.qos_manager.set_rules(datapath.id)
-                self.qos_manager.set_queues(datapath.id)
+                self.qos_manager.set_queues(datapath.id, True)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
                 self.logger.debug('adapting-monitor: unregister datapath: %016x', datapath.id)
@@ -153,13 +169,3 @@ class AdaptingMonitor13(app_manager.RyuApp):
             # that have finally been transmitted. This is not a problem for us, but it is important to know
             flow = FlowId(stat.match['ipv4_dst'], stat.match['udp_dst'])
             self.stats[dpid].put(flow, stat.byte_count)
-
-        # To make adaptation global to the network, the QoSManager need to see a projection of flowstats that has the
-        # maximum measured value for each flow, thus accumulating the measurements from all datapaths.
-        flowstat_max_per_flow: Dict[FlowId, float] = {}
-        for fsm in self.stats.values():
-            for fid, avg_speed in fsm.export_avg_speeds_bps().items():
-                if fid not in flowstat_max_per_flow or \
-                        avg_speed > flowstat_max_per_flow[fid]:
-                    flowstat_max_per_flow[fid] = avg_speed
-        self.qos_manager.adapt_queues(flowstat_max_per_flow)
