@@ -3,11 +3,18 @@ import logging
 from copy import deepcopy
 from math import ceil
 from typing import Tuple, Type
+from dataclasses import dataclass
 
 import requests
 import ryu.lib.hub
 
 from flow import *
+
+
+@dataclass
+class FlowLimitEntry:
+    limit: int
+    queue_id: int
 
 
 class QoSManager:
@@ -51,13 +58,13 @@ class QoSManager:
             logger.debug("config: interface_max_rate not set")
 
     def __init__(self, flows_with_init_limits: Dict[FlowId, int]):
-        self.flows_limits: Dict[FlowId, Tuple[int, int]] = {}  # This will hold the actual values updated
+        self.flows_limits: Dict[FlowId, FlowLimitEntry] = {}  # This will hold the actual values updated
 
         # Start from qnum = 1 so that the matches to the first rule does not get the same queue as non-matches
         flows_initlims_enum = enumerate(flows_with_init_limits, start=1)
         for qnum, k in flows_initlims_enum:
-            self.flows_limits[k] = (flows_with_init_limits[k], qnum)
-        self.FLOWS_INIT_LIMITS: Dict[FlowId, Tuple[int, int]] = \
+            self.flows_limits[k] = FlowLimitEntry(flows_with_init_limits[k], qnum)
+        self.FLOWS_INIT_LIMITS: Dict[FlowId, FlowLimitEntry] = \
             deepcopy(self.flows_limits)  # This does not change, it contains the values of the ideal, "customer" case
 
         self.__logger = logging.getLogger("qos_manager")
@@ -82,7 +89,7 @@ class QoSManager:
         """
         if type(dpid) == int:
             dpid = "%016x" % dpid
-        queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
+        queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.get_current_limit(k) for k in self.flows_limits]
         try:
             r = requests.post("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid),
                               headers={'Content-Type': 'application/json'},
@@ -132,15 +139,15 @@ class QoSManager:
         :return: Whether queue update needs to be sent to the switches or not.
         """
         modified = False
-        unexploited_flows = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0]]
-        full_flows = [k for k, v in flowstats.items() if v >= self.FLOWS_INIT_LIMITS[k][0]]
+        unexploited_flows = [k for k, v in flowstats.items() if v < self.get_initial_limit(k)]
+        full_flows = [k for k, v in flowstats.items() if v >= self.get_initial_limit(k)]
         self.__logger.debug("qosmanager:\n\tunexploited:\t%s\n\tfull:\t%s" % (unexploited_flows, full_flows))
 
         overall_gain = 0  # b/s which is available extra after rate reduction
 
         for flow in unexploited_flows:
             load = flowstats[flow]
-            original_limit = self.FLOWS_INIT_LIMITS[flow][0]
+            original_limit = self.get_initial_limit(flow)
             bw_step = 0.1 * original_limit  # The granularity in which adaptation happens
             newlimit = max(ceil(load / bw_step) * bw_step, original_limit / 4)
 
@@ -158,7 +165,7 @@ class QoSManager:
         except ZeroDivisionError:
             gain_per_flow = 0
         for flow in full_flows:
-            if self._update_limit(flow, self.FLOWS_INIT_LIMITS[flow][0] + gain_per_flow):
+            if self._update_limit(flow, self.get_initial_limit(flow) + gain_per_flow):
                 modified = True
         return modified
 
@@ -184,7 +191,7 @@ class QoSManager:
                                       "nw_proto": "UDP",
                                       "tp_dst": k.udp_dst,
                                   },
-                                  "actions": {"queue": self.flows_limits[k][1]}
+                                  "actions": {"queue": self.flows_limits[k].queue_id}
                               }))
             self.log_http_response(r)
 
@@ -224,7 +231,7 @@ class QoSManager:
 
         :return: The current rate limit applied to `flow` in bits/s.
         """
-        return self.flows_limits[flow][0]
+        return self.flows_limits[flow].limit
 
     def get_initial_limit(self, flow: FlowId) -> int:
         """
@@ -232,7 +239,7 @@ class QoSManager:
 
         :return: The initial rate limit applied to `flow` in bits/s.
         """
-        return self.FLOWS_INIT_LIMITS[flow][0]
+        return self.FLOWS_INIT_LIMITS[flow].limit
 
     def _update_limit(self, flow: FlowId, newlimit, force: bool = False) -> bool:
         """
@@ -246,7 +253,7 @@ class QoSManager:
         :return: Whether the limit is updated or not
         """
         if abs(newlimit - self.get_current_limit(flow)) > QoSManager.LIMIT_STEP or force:
-            self.flows_limits[flow] = (int(newlimit), self.flows_limits[flow][1])
+            self.flows_limits[flow] = FlowLimitEntry(int(newlimit), self.flows_limits[flow].queue_id)
             self.__logger.info("Flow limit for flow '{}' updated to {}bps".format(flow, newlimit))
             return True
         else:
