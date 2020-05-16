@@ -285,19 +285,38 @@ class ThreadedQoSManager(QoSManager):
         self._adapt_sem = sem_cls(1)
         self._sem_blocking = blocking
 
-    def set_queues(self, dpid: int = "all", blocking: bool = None):
-        if blocking is None:
-            blocking = self._sem_blocking
-        sem_acquired = self._resource_set_sem.acquire(blocking)
-        self.__logger.debug("threaded_qos_manager: _resource_set_sem.acquire = %s" % sem_acquired)
-        if sem_acquired is False:
-            self.__logger.debug("threaded_qos_manager: Skipping queue setting due to other pending operation.")
-            return
+    def thread_safe_resource(func):
+        def wrapper(self, *args, blocking: bool = None):
+            if blocking is None:
+                blocking = self._sem_blocking
+            sem_acquired = self._resource_set_sem.acquire(blocking)
+            self.__logger.debug("threaded_qos_manager: thread_safe_resource called with blocking = %s" % blocking)
+            self.__logger.debug("threaded_qos_manager: _resource_set_sem.acquire = %s" % sem_acquired)
+            if sem_acquired is False:
+                self.__logger.info("threaded_qos_manager: Skipping %s due to other pending operation." % func.__name__)
+                return
 
-        ret = super().set_queues(dpid)
+            ret = func(self, *args)
 
-        self._resource_set_sem.release(blocking)
-        return ret
+            self._resource_set_sem.release(blocking)
+            return ret
+        return wrapper
+
+    @thread_safe_resource
+    def set_ovsdb_addr(self, dpid: int):
+        return super().set_ovsdb_addr(dpid)
+
+    @thread_safe_resource
+    def set_queues(self, dpid: int = "all"):
+        return super().set_queues(dpid)
+
+    @thread_safe_resource
+    def get_queues(self, dpid: int = "all"):
+        return super().get_queues(dpid)
+
+    @thread_safe_resource
+    def delete_queues(self, dpid: int = "all"):
+        return super().delete_queues(dpid)
 
     def adapt_queues(self, flowstats: Dict[FlowId, float], blocking: bool = None):
         if blocking is None:
@@ -313,3 +332,15 @@ class ThreadedQoSManager(QoSManager):
             self.set_queues(blocking=True)
 
         self._adapt_sem.release(blocking)
+
+    @thread_safe_resource
+    def set_rules(self, dpid: int = "all"):
+        return super().set_rules(dpid)
+
+    @thread_safe_resource
+    def get_rules(self, dpid: int = "all"):
+        return super().get_rules(dpid)
+
+    @thread_safe_resource
+    def delete_rules(self, dpid: int = "all"):
+        return super().delete_rules(dpid)

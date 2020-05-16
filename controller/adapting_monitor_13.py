@@ -111,9 +111,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 datapath.cname = all_ports[0]
                 datapath.ports = all_ports[1:]
                 self.stats[datapath.id] = FlowStatManager(AdaptingMonitor13.TIME_STEP)
-                self.qos_manager.set_ovsdb_addr(datapath.id)
-                self.qos_manager.set_rules(datapath.id)
-                self.qos_manager.set_queues(datapath.id, True)
+                self.qos_manager.set_ovsdb_addr(datapath.id, blocking=True)
+                self.qos_manager.set_rules(datapath.id, blocking=True)
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
                 self.logger.debug('adapting-monitor: unregister datapath: %016x', datapath.id)
