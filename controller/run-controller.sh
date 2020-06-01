@@ -4,7 +4,7 @@ source .venv/bin/activate
 
 set -v
 
-ryu-manager --config-file  controller.cfg $@ \
+ryu-manager --config-file controller.cfg --log-config-file logger.conf $@ \
 	ryu.app.rest_qos \
 	ryu.app.rest_conf_switch \
 	qos_simple_switch_13.py \

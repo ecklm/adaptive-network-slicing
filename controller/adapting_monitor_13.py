@@ -16,6 +16,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
     TIME_STEP = 5  # The number of seconds between two stat request
     FLOWS_LIMITS: Dict[FlowId, int] = {}  # Rate limits associated to different flows
+    LOG_STAT_SEQUENCE_DELIMITER = "=" * 50
 
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
@@ -33,17 +34,24 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
     def start(self):
         super(AdaptingMonitor13, self).start()
+        self.logger.info(self.__class__.LOG_STAT_SEQUENCE_DELIMITER)
         self.threads.append(hub.spawn(self._monitor))
         self.threads.append(hub.spawn(self._adapt))
 
+    def stop(self):
+        super().stop()
+        self.logger.info(self.__class__.LOG_STAT_SEQUENCE_DELIMITER)
+
     def _monitor(self):
+        self.logger.info("Network monitoring started.")
         while self.is_active:
             for dp in list(self.datapaths.values()):
                 self._request_stats(dp)
             hub.sleep(AdaptingMonitor13.TIME_STEP)
-        self.logger.info("adapting_monitor: Network monitoring stopped.")
+        self.logger.info("Network monitoring stopped.")
 
     def _adapt(self):
+        self.logger.info("Queue adaptation loop started.")
         while self.is_active:
             # To make adaptation global to the network, the QoSManager need to see a projection of flowstats that has
             # the maximum measured value for each flow, thus accumulating the measurements from all datapaths.
@@ -56,7 +64,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
             if flowstat_max_per_flow:
                 self.qos_manager.adapt_queues(flowstat_max_per_flow, False)
             hub.sleep(AdaptingMonitor13.TIME_STEP)
-        self.logger.info("adapting_monitor: Queue adaptation loop stopped.")
+        self.logger.info("Queue adaptation loop stopped.")
 
     @classmethod
     def configure(cls, config_path: str) -> None:
@@ -68,7 +76,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
 
         :param config_path: Path to the configuration file
         """
-        logger = logging.getLogger("adapting_monitor")
+        logger = logging.getLogger("config")
 
         ch = config_handler.ConfigHandler(config_path)
         # Don't catch exception on purpose, bad config => Not working app
@@ -78,20 +86,20 @@ class AdaptingMonitor13(app_manager.RyuApp):
             try:
                 new_flow_id = FlowId.from_dict(flow)
                 cls.FLOWS_LIMITS[new_flow_id] = flow["base_ratelimit"]
-                logger.info("config: flow configuration added: ({}, {})".format(
+                logger.info("flow configuration added: ({}, {})".format(
                     new_flow_id, flow["base_ratelimit"])
                 )
             except (TypeError, KeyError) as e:
-                logger.error("config: Invalid Flow object: {}. Reason: {}".format(flow, e))
+                logger.error("Invalid Flow object: {}. Reason: {}".format(flow, e))
         if len(cls.FLOWS_LIMITS) <= 0:
             raise config_handler.ConfigError("config: No valid flow definition found.")
 
         # Optional fields
         if "time_step" in ch.config:
             cls.TIME_STEP = int(ch.config["time_step"])
-            logger.info("config: time_step set to {}".format(cls.TIME_STEP))
+            logger.info("time_step set to {}".format(cls.TIME_STEP))
         else:
-            logger.debug("config: time_step not set")
+            logger.debug("time_step not set")
 
         # Configure other classes
         QoSManager.configure(ch)
@@ -103,7 +111,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
         datapath = ev.datapath
         if ev.state == MAIN_DISPATCHER:
             if datapath.id not in self.datapaths:
-                self.logger.debug('adapting-monitor: register datapath: %016x', datapath.id)
+                self.logger.debug('register datapath: %016x', datapath.id)
                 self.datapaths[datapath.id] = datapath
                 # Ports list always has one element with the name of the switch itself and the rest with actual port
                 # names.
@@ -117,12 +125,12 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 # unnecessarily when a global queue adaptation is in progress.
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
-                self.logger.debug('adapting-monitor: unregister datapath: %016x', datapath.id)
+                self.logger.debug('unregister datapath: %016x', datapath.id)
                 del self.datapaths[datapath.id]
                 del self.stats[datapath.id]
 
     def _request_stats(self, datapath):
-        self.logger.debug('adapting-monitor: send stats request: %016x', datapath.id)
+        self.logger.debug('send stats request: %016x', datapath.id)
         parser = datapath.ofproto_parser
 
         req = parser.OFPFlowStatsRequest(datapath)

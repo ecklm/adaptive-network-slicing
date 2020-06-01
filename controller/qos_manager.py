@@ -32,30 +32,30 @@ class QoSManager:
 
         :param ch: The config_handler object.
         """
-        logger = logging.getLogger("qos_manager")
+        logger = logging.getLogger("config")
 
         # Mandatory fields
         cls.CONTROLLER_BASEURL = ch.config["controller_baseurl"]
-        logger.info("config: controller_baseurl set to {}".format(cls.CONTROLLER_BASEURL))
+        logger.info("controller_baseurl set to {}".format(cls.CONTROLLER_BASEURL))
 
         if type(ch.config["ovsdb_addr"]) == str:
             cls.OVSDB_ADDR = ch.config["ovsdb_addr"]
-            logger.info("config: ovsdb_addr set to {}".format(cls.OVSDB_ADDR))
+            logger.info("ovsdb_addr set to {}".format(cls.OVSDB_ADDR))
         else:
             raise TypeError("config: ovsdb_addr must be string")
 
         # Optional fields
         if "limit_step" in ch.config:
             cls.LIMIT_STEP = int(ch.config["limit_step"])
-            logger.info("config: limit_step set to {}".format(cls.LIMIT_STEP))
+            logger.info("limit_step set to {}".format(cls.LIMIT_STEP))
         else:
-            logger.debug("config: limit_step not set")
+            logger.debug("limit_step not set")
 
         if "interface_max_rate" in ch.config:
             cls.DEFAULT_MAX_RATE = int(ch.config["interface_max_rate"])
-            logger.info("config: interface_max_rate set to {}".format(cls.DEFAULT_MAX_RATE))
+            logger.info("interface_max_rate set to {}".format(cls.DEFAULT_MAX_RATE))
         else:
-            logger.debug("config: interface_max_rate not set")
+            logger.debug("interface_max_rate not set")
 
     def __init__(self, flows_with_init_limits: Dict[FlowId, int]):
         self.flows_limits: Dict[FlowId, FlowLimitEntry] = {}  # This will hold the actual values updated
@@ -102,7 +102,7 @@ class QoSManager:
                               }))
             self.log_http_response(r)
         except requests.exceptions.ConnectionError as err:
-            self.__logger.error("qos_manager: Queue setting has failed. {}".format(err))
+            self.__logger.error("Queue setting has failed. {}".format(err))
 
     def get_queues(self, dpid: int = "all"):
         """
@@ -141,7 +141,8 @@ class QoSManager:
         modified = False
         unexploited_flows = [k for k, v in flowstats.items() if v < self.get_initial_limit(k)]
         full_flows = [k for k, v in flowstats.items() if v >= self.get_initial_limit(k)]
-        self.__logger.debug("qosmanager:\n\tunexploited:\t%s\n\tfull:\t%s" % (unexploited_flows, full_flows))
+        self.__logger.debug("unexploited:\t%s" % unexploited_flows)
+        self.__logger.debug("full:\t%s" % full_flows)
 
         overall_gain = 0  # b/s which is available extra after rate reduction
 
@@ -297,10 +298,10 @@ class ThreadedQoSManager(QoSManager):
             if blocking is None:
                 blocking = self._sem_blocking
             sem_acquired = self._resource_set_sem.acquire(blocking)
-            self.__logger.debug("threaded_qos_manager: thread_safe_resource called with blocking = %s" % blocking)
-            self.__logger.debug("threaded_qos_manager: _resource_set_sem.acquire = %s" % sem_acquired)
+            self.__logger.debug("thread_safe_resource called with blocking = %s" % blocking)
+            self.__logger.debug("_resource_set_sem.acquire = %s" % sem_acquired)
             if sem_acquired is False:
-                self.__logger.info("threaded_qos_manager: Skipping %s due to other pending operation." % func.__name__)
+                self.__logger.debug("Skipping %s due to other pending operation." % func.__name__)
                 return
 
             ret = func(self, *args)
@@ -329,9 +330,9 @@ class ThreadedQoSManager(QoSManager):
         if blocking is None:
             blocking = self._sem_blocking
         sem_acquired = self._adapt_sem.acquire(blocking)
-        self.__logger.debug("threaded_qos_manager: _adapt_sem.acquire = %s" % sem_acquired)
+        self.__logger.debug("_adapt_sem.acquire = %s" % sem_acquired)
         if sem_acquired is False:
-            self.__logger.debug("threaded_qos_manager: Skipping queue adaptation due to other pending operation.")
+            self.__logger.debug("Skipping queue adaptation due to other pending operation.")
             return
 
         modified = self._pre_adapt(flowstats)
