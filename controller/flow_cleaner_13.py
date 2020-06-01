@@ -15,7 +15,7 @@ class FlowCleaner13(app_manager.RyuApp):
 
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
-    def close(self):
+    def stop(self):
         for dpid in self.__datapaths:
             r = requests.delete("http://localhost:8080/stats/flowentry/clear/%d" % dpid)
             if r.status_code >= 200 and r.status_code < 300:
@@ -23,6 +23,7 @@ class FlowCleaner13(app_manager.RyuApp):
             else:
                 self.logger.error("flow_cleaner: Failed to deleted all flow entries from %016x. Reason: %s" %
                                   (dpid, r.text))
+        super().stop()
 
     def __init__(self, *args, **kwargs):
         super(FlowCleaner13, self).__init__(*args, **kwargs)
@@ -30,14 +31,12 @@ class FlowCleaner13(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [MAIN_DISPATCHER])
     def _register_datapath(self, ev):
-        if ev.datapath.id is None:
-            return
-        self.logger.debug('flow_cleaner: register datapath: %016x', ev.datapath.id)
-        self.__datapaths.add(ev.datapath.id)
+        if ev.datapath.id not in self.__datapaths:
+            self.logger.debug('flow_cleaner: register datapath: %016x', ev.datapath.id)
+            self.__datapaths.add(ev.datapath.id)
 
     @set_ev_cls(ofp_event.EventOFPStateChange, [DEAD_DISPATCHER])
     def _unregister_datapath(self, ev):
-        if ev.datapath.id is None:
-            return
-        self.logger.debug('flow_cleaner: unregister datapath: %016x', ev.datapath.id)
-        self.__datapaths.remove(ev.datapath.id)
+        if ev.datapath.id in self.__datapaths:
+            self.logger.debug('flow_cleaner: unregister datapath: %016x', ev.datapath.id)
+            self.__datapaths.remove(ev.datapath.id)

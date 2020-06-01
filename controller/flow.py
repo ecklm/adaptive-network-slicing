@@ -1,4 +1,5 @@
 import logging
+import time
 
 from dataclasses import dataclass
 from typing import Dict
@@ -27,6 +28,12 @@ class FlowId:
             raise TypeError("The given dict is not a proper FlowId, {} is missing.".format(ex)) from ex
 
 
+@dataclass
+class FlowStatEntry:
+    value: int
+    timestamp: float
+
+
 class FlowStat:
     WINDOW_SIZE = 10  # The number of data stored for statistical calculations
     SCALING_PREFIXES = {'K': 1 / 1000, 'M': 1 / 1000000, 'G': 1 / 1000000000, None: 1}
@@ -43,35 +50,36 @@ class FlowStat:
         # Optional fields
         if "flowstat_window_size" in ch.config:
             cls.WINDOW_SIZE = int(ch.config["flowstat_window_size"])
-            logger.debug("config: flowstat_window_size set to {}".format(cls.WINDOW_SIZE))
+            logger.info("config: flowstat_window_size set to {}".format(cls.WINDOW_SIZE))
         else:
             logger.debug("config: flowstat_window_size not set")
 
-    def __init__(self, time_step: int):
-        """:param time_step: The number of seconds between two measurements."""
-        self.data = []
-        self.time_step = time_step
+    def __init__(self):
+        self.data: List[FlowStatEntry] = []
 
-    def put(self, val: int):
+    def put(self, val: int, timestamp: float = None):
         """
         Put data in the list for calculating statistics.
 
         :param val: Must be a positive integer and greater than or equal to the last value.
         :raises ValueError: If `val` is semantically incorrect.
         """
+        if timestamp is None:
+            timestamp = time.time()
+
         if val < 0:
             raise ValueError("Values in need to be positive. Got {}".format(val))
         try:
-            if val < self.data[-1]:
+            if val < self.data[-1].value:
                 raise ValueError("Data must show monotonic increase. Passed data is smaller than last one. []".format(
-                    [self.data[-1], val])
+                    [self.data[-1].value, val])
                 )
         except IndexError:
             pass
         if len(self.data) < FlowStat.WINDOW_SIZE:
-            self.data.append(val)
+            self.data.append(FlowStatEntry(val, timestamp))
         else:
-            self.data = self.data[1:] + [val]
+            self.data = self.data[1:] + [FlowStatEntry(val, timestamp)]
 
     def get_avg(self, prefix: str = None) -> float:
         """
@@ -84,9 +92,10 @@ class FlowStat:
         elif len(self.data) == 1:
             # This number will not necessarily make sense, but at least it may prevent the QoS manager from decreasing
             # the limits for all flows at the first measurement
-            return self.data[0]
+            return self.data[0].value
         else:
-            return (self.data[-1] - self.data[0]) * FlowStat.SCALING_PREFIXES[prefix] / float(len(self.data) - 1)
+            return (self.data[-1].value - self.data[0].value) * FlowStat.SCALING_PREFIXES[prefix] / \
+                    float(len(self.data) - 1)
 
     def get_avg_speed(self, prefix: str = None) -> float:
         """
@@ -94,7 +103,14 @@ class FlowStat:
 
         :param prefix: See `FlowStat.get_avg` parameter documentation.
         """
-        return self.get_avg(prefix) / float(self.time_step)
+        if len(self.data) <= 1:
+            return 0
+        else:
+            try:
+                return (self.data[-1].value - self.data[0].value) * FlowStat.SCALING_PREFIXES[prefix] / \
+                        (self.data[-1].timestamp - self.data[0].timestamp)
+            except ZeroDivisionError:
+                return 0
 
     def get_avg_speed_bps(self, prefix: str = None) -> float:
         """
@@ -106,11 +122,10 @@ class FlowStat:
 
 
 class FlowStatManager:
-    def __init__(self, time_step):
+    def __init__(self):
         self.stats: Dict[FlowId, FlowStat] = {}
-        self.time_step = time_step
 
-    def put(self, flow: FlowId, val: int) -> None:
+    def put(self, flow: FlowId, val: int, timestamp: float = None) -> None:
         """
         Add a new record to the specified flow's stats.
 
@@ -118,10 +133,10 @@ class FlowStatManager:
         :param val: The measurement value.
         """
         try:
-            self.stats[flow].put(val)
+            self.stats[flow].put(val, timestamp)
         except KeyError:
-            self.stats[flow] = FlowStat(self.time_step)
-            self.stats[flow].put(val)
+            self.stats[flow] = FlowStat()
+            self.stats[flow].put(val, timestamp)
 
     def get_avg(self, flow: FlowId, prefix: str = None) -> float:
         """

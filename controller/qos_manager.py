@@ -1,12 +1,20 @@
 import json
 import logging
-import requests
-
 from copy import deepcopy
 from math import ceil
-from typing import Tuple
+from typing import Tuple, Type
+from dataclasses import dataclass
+
+import requests
+import ryu.lib.hub
 
 from flow import *
+
+
+@dataclass
+class FlowLimitEntry:
+    limit: int
+    queue_id: int
 
 
 class QoSManager:
@@ -32,31 +40,31 @@ class QoSManager:
 
         if type(ch.config["ovsdb_addr"]) == str:
             cls.OVSDB_ADDR = ch.config["ovsdb_addr"]
-            logger.debug("config: ovsdb_addr set to {}".format(cls.OVSDB_ADDR))
+            logger.info("config: ovsdb_addr set to {}".format(cls.OVSDB_ADDR))
         else:
             raise TypeError("config: ovsdb_addr must be string")
 
         # Optional fields
         if "limit_step" in ch.config:
             cls.LIMIT_STEP = int(ch.config["limit_step"])
-            logger.debug("config: limit_step set to {}".format(cls.LIMIT_STEP))
+            logger.info("config: limit_step set to {}".format(cls.LIMIT_STEP))
         else:
             logger.debug("config: limit_step not set")
 
         if "interface_max_rate" in ch.config:
             cls.DEFAULT_MAX_RATE = int(ch.config["interface_max_rate"])
-            logger.debug("config: interface_max_rate set to {}".format(cls.DEFAULT_MAX_RATE))
+            logger.info("config: interface_max_rate set to {}".format(cls.DEFAULT_MAX_RATE))
         else:
             logger.debug("config: interface_max_rate not set")
 
     def __init__(self, flows_with_init_limits: Dict[FlowId, int]):
-        self.flows_limits: Dict[FlowId, Tuple[int, int]] = {}  # This will hold the actual values updated
+        self.flows_limits: Dict[FlowId, FlowLimitEntry] = {}  # This will hold the actual values updated
 
         # Start from qnum = 1 so that the matches to the first rule does not get the same queue as non-matches
         flows_initlims_enum = enumerate(flows_with_init_limits, start=1)
         for qnum, k in flows_initlims_enum:
-            self.flows_limits[k] = (flows_with_init_limits[k], qnum)
-        self.FLOWS_INIT_LIMITS: Dict[FlowId, Tuple[int, int]] = \
+            self.flows_limits[k] = FlowLimitEntry(flows_with_init_limits[k], qnum)
+        self.FLOWS_INIT_LIMITS: Dict[FlowId, FlowLimitEntry] = \
             deepcopy(self.flows_limits)  # This does not change, it contains the values of the ideal, "customer" case
 
         self.__logger = logging.getLogger("qos_manager")
@@ -81,17 +89,20 @@ class QoSManager:
         """
         if type(dpid) == int:
             dpid = "%016x" % dpid
-        queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.flows_limits[k][0] for k in self.flows_limits]
-        r = requests.post("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid),
-                          headers={'Content-Type': 'application/json'},
-                          data=json.dumps({
-                              # From doc: port_name is optional argument. If does not pass the port_name argument, all
-                              # ports are target for configuration.
-                              "type": "linux-htb", "max_rate": str(QoSManager.DEFAULT_MAX_RATE),
-                              "queues":
-                                  [{"max_rate": str(limit)} for limit in queue_limits]
-                          }))
-        self.log_http_response(r)
+        queue_limits = [QoSManager.DEFAULT_MAX_RATE] + [self.get_current_limit(k) for k in self.flows_limits]
+        try:
+            r = requests.post("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid),
+                              headers={'Content-Type': 'application/json'},
+                              data=json.dumps({
+                                  # From doc: port_name is optional argument. If does not pass the port_name argument,
+                                  # all ports are target for configuration.
+                                  "type": "linux-htb", "max_rate": str(QoSManager.DEFAULT_MAX_RATE),
+                                  "queues":
+                                      [{"max_rate": str(limit)} for limit in queue_limits]
+                              }))
+            self.log_http_response(r)
+        except requests.exceptions.ConnectionError as err:
+            self.__logger.error("qos_manager: Queue setting has failed. {}".format(err))
 
     def get_queues(self, dpid: int = "all"):
         """
@@ -121,17 +132,22 @@ class QoSManager:
         r = requests.delete("%s/qos/queue/%s" % (QoSManager.CONTROLLER_BASEURL, dpid))
         self.log_http_response(r)
 
-    def adapt_queues(self, flowstats: Dict[FlowId, float]):
+    def _pre_adapt(self, flowstats: Dict[FlowId, float]) -> bool:
+        """
+        Calculate and locally update queue limits before sending updates to the switch.
+
+        :return: Whether queue update needs to be sent to the switches or not.
+        """
         modified = False
-        unexploited_flows = [k for k, v in flowstats.items() if v < self.FLOWS_INIT_LIMITS[k][0]]
-        full_flows = [k for k, v in flowstats.items() if v >= self.FLOWS_INIT_LIMITS[k][0]]
+        unexploited_flows = [k for k, v in flowstats.items() if v < self.get_initial_limit(k)]
+        full_flows = [k for k, v in flowstats.items() if v >= self.get_initial_limit(k)]
         self.__logger.debug("qosmanager:\n\tunexploited:\t%s\n\tfull:\t%s" % (unexploited_flows, full_flows))
 
         overall_gain = 0  # b/s which is available extra after rate reduction
 
         for flow in unexploited_flows:
             load = flowstats[flow]
-            original_limit = self.FLOWS_INIT_LIMITS[flow][0]
+            original_limit = self.get_initial_limit(flow)
             bw_step = 0.1 * original_limit  # The granularity in which adaptation happens
             newlimit = max(ceil(load / bw_step) * bw_step, original_limit / 4)
 
@@ -149,8 +165,12 @@ class QoSManager:
         except ZeroDivisionError:
             gain_per_flow = 0
         for flow in full_flows:
-            if self._update_limit(flow, self.FLOWS_INIT_LIMITS[flow][0] + gain_per_flow):
+            if self._update_limit(flow, self.get_initial_limit(flow) + gain_per_flow):
                 modified = True
+        return modified
+
+    def adapt_queues(self, flowstats: Dict[FlowId, float]):
+        modified = self._pre_adapt(flowstats)
         if modified:
             self.set_queues()
 
@@ -171,7 +191,7 @@ class QoSManager:
                                       "nw_proto": "UDP",
                                       "tp_dst": k.udp_dst,
                                   },
-                                  "actions": {"queue": self.flows_limits[k][1]}
+                                  "actions": {"queue": self.flows_limits[k].queue_id}
                               }))
             self.log_http_response(r)
 
@@ -211,7 +231,7 @@ class QoSManager:
 
         :return: The current rate limit applied to `flow` in bits/s.
         """
-        return self.flows_limits[flow][0]
+        return self.flows_limits[flow].limit
 
     def get_initial_limit(self, flow: FlowId) -> int:
         """
@@ -219,7 +239,7 @@ class QoSManager:
 
         :return: The initial rate limit applied to `flow` in bits/s.
         """
-        return self.FLOWS_INIT_LIMITS[flow][0]
+        return self.FLOWS_INIT_LIMITS[flow].limit
 
     def _update_limit(self, flow: FlowId, newlimit, force: bool = False) -> bool:
         """
@@ -233,7 +253,7 @@ class QoSManager:
         :return: Whether the limit is updated or not
         """
         if abs(newlimit - self.get_current_limit(flow)) > QoSManager.LIMIT_STEP or force:
-            self.flows_limits[flow] = (int(newlimit), self.flows_limits[flow][1])
+            self.flows_limits[flow] = FlowLimitEntry(int(newlimit), self.flows_limits[flow].queue_id)
             self.__logger.info("Flow limit for flow '{}' updated to {}bps".format(flow, newlimit))
             return True
         else:
@@ -250,3 +270,84 @@ class QoSManager:
                                  json.dumps(r.json(), indent=4, sort_keys=True)))
         except ValueError:  # the response is not JSON
             log("{} - {}".format(r.status_code, r.text))
+
+
+class ThreadedQoSManager(QoSManager):
+    """Does the same thing as QoSManager, but wraps its functions to be thread safe."""
+
+    def __init__(self, flows_with_init_limits: Dict[FlowId, int],
+                 sem_cls: Type[ryu.lib.hub.Semaphore] = ryu.lib.hub.BoundedSemaphore,
+                 blocking: bool = False):
+        """
+        Initialise a QoSManager object with the necessary semaphore settings.
+
+        :param sem_cls: The class of the Semaphore to be used. Defaults to BoundedSemaphore by Ryu hub.
+        :param blocking: Sets whether acquire() call should be blocking or not. In the non-blocking case, the respective
+        function will simply be skipped. This can be overridden in the specific function calls.
+        """
+        super().__init__(flows_with_init_limits)
+        self.__logger = logging.getLogger("threaded_qos_manager")
+
+        self._resource_set_sem = sem_cls(1)
+        self._adapt_sem = sem_cls(1)
+        self._sem_blocking = blocking
+
+    def thread_safe_resource(func):
+        def wrapper(self, *args, blocking: bool = None):
+            if blocking is None:
+                blocking = self._sem_blocking
+            sem_acquired = self._resource_set_sem.acquire(blocking)
+            self.__logger.debug("threaded_qos_manager: thread_safe_resource called with blocking = %s" % blocking)
+            self.__logger.debug("threaded_qos_manager: _resource_set_sem.acquire = %s" % sem_acquired)
+            if sem_acquired is False:
+                self.__logger.info("threaded_qos_manager: Skipping %s due to other pending operation." % func.__name__)
+                return
+
+            ret = func(self, *args)
+
+            self._resource_set_sem.release(blocking)
+            return ret
+        return wrapper
+
+    @thread_safe_resource
+    def set_ovsdb_addr(self, dpid: int):
+        return super().set_ovsdb_addr(dpid)
+
+    @thread_safe_resource
+    def set_queues(self, dpid: int = "all"):
+        return super().set_queues(dpid)
+
+    @thread_safe_resource
+    def get_queues(self, dpid: int = "all"):
+        return super().get_queues(dpid)
+
+    @thread_safe_resource
+    def delete_queues(self, dpid: int = "all"):
+        return super().delete_queues(dpid)
+
+    def adapt_queues(self, flowstats: Dict[FlowId, float], blocking: bool = None):
+        if blocking is None:
+            blocking = self._sem_blocking
+        sem_acquired = self._adapt_sem.acquire(blocking)
+        self.__logger.debug("threaded_qos_manager: _adapt_sem.acquire = %s" % sem_acquired)
+        if sem_acquired is False:
+            self.__logger.debug("threaded_qos_manager: Skipping queue adaptation due to other pending operation.")
+            return
+
+        modified = self._pre_adapt(flowstats)
+        if modified:
+            self.set_queues(blocking=True)
+
+        self._adapt_sem.release(blocking)
+
+    @thread_safe_resource
+    def set_rules(self, dpid: int = "all"):
+        return super().set_rules(dpid)
+
+    @thread_safe_resource
+    def get_rules(self, dpid: int = "all"):
+        return super().get_rules(dpid)
+
+    @thread_safe_resource
+    def delete_rules(self, dpid: int = "all"):
+        return super().delete_rules(dpid)

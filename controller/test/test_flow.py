@@ -38,18 +38,18 @@ FlowStat.configure(ch)
 
 
 def test_flowstat_get_empty():
-    f = FlowStat(5)
+    f = FlowStat()
     assert f.get_avg() == 0
 
 
 def test_flowstat_put_negative_number():
-    f = FlowStat(5)
+    f = FlowStat()
     with pytest.raises(ValueError):
         f.put(-4)
 
 
 def test_flowstat_put_out_of_order_number():
-    f = FlowStat(5)
+    f = FlowStat()
     with pytest.raises(ValueError):
         f.put(1)
         f.put(5)
@@ -57,27 +57,27 @@ def test_flowstat_put_out_of_order_number():
 
 
 def test_flowstat_get_one():
-    f = FlowStat(5)
+    f = FlowStat()
     f.put(5)
     assert f.get_avg() == 5
 
 
 def test_flowstat_get_avg():
-    f = FlowStat(5)
+    f = FlowStat()
     for x in [1, 3, 5, 7]:
         f.put(x)
     assert f.get_avg() == 2
 
 
 def test_flowstat_get_avg_good_prefix():
-    f = FlowStat(5)
+    f = FlowStat()
     for x in [1, 3, 5, 7]:
         f.put(x)
     assert f.get_avg('K') == 2 / 1000 and f.get_avg('M') == 2 / 1000000 and f.get_avg('G') == 2 / 1000000000
 
 
 def test_flowstat_get_avg_bad_prefix():
-    f = FlowStat(5)
+    f = FlowStat()
     for x in [1, 3, 5, 7]:
         f.put(x)
     with pytest.raises(KeyError):
@@ -85,16 +85,20 @@ def test_flowstat_get_avg_bad_prefix():
 
 
 def test_flowstat_get_avg_speed():
-    f = FlowStat(5)
+    f = FlowStat()
+    timestamp = 0
     for x in [1, 3, 5, 7]:
-        f.put(x)
+        f.put(x, timestamp)
+        timestamp += 5
     assert f.get_avg_speed() == 0.4
 
 
 def test_flowstat_get_avg_speed_bps():
-    f = FlowStat(5)
+    f = FlowStat()
+    timestamp = 0
     for x in [1, 3, 5, 7]:
-        f.put(x)
+        f.put(x, timestamp)
+        timestamp += 5
     assert f.get_avg_speed_bps() == 0.4 * 8
 
 
@@ -105,7 +109,7 @@ f2 = FlowId("192.0.2.1", 5002)
 
 
 def test_flowstatmanager_get_avg_two_flows():
-    fm = FlowStatManager(5)
+    fm = FlowStatManager()
     for x in [1, 3, 5, 7]:
         fm.put(f1, x)
     for x in [6, 13, 25, 27]:
@@ -114,15 +118,18 @@ def test_flowstatmanager_get_avg_two_flows():
 
 
 def test_flowstatmanager_get_unmanaged_flow():
-    fm = FlowStatManager(5)
+    fm = FlowStatManager()
     with pytest.raises(KeyError):
         fm.get_avg(f1)
 
 
 def test_export_avg_speeds():
-    fm = FlowStatManager(5)
+    fm = FlowStatManager()
+    timestamp = 0
     for x in [1, 3, 5, 7]:
-        fm.put(f1, x)
+        fm.put(f1, x, timestamp)
+        timestamp += 5
     for x in [6, 13, 25, 27]:
-        fm.put(f2, x)
+        fm.put(f2, x, timestamp)
+        timestamp += 5
     assert fm.export_avg_speeds() == {f1: 0.4, f2: 1.4}
