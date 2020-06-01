@@ -113,6 +113,8 @@ class AdaptingMonitor13(app_manager.RyuApp):
                 self.stats[datapath.id] = FlowStatManager()
                 self.qos_manager.set_ovsdb_addr(datapath.id, blocking=True)
                 self.qos_manager.set_rules(datapath.id, blocking=True)
+                self.qos_manager.set_queues(datapath.id, blocking=False)  # Blocking=False will make it not run
+                # unnecessarily when a global queue adaptation is in progress.
         elif ev.state == DEAD_DISPATCHER:
             if datapath.id in self.datapaths:
                 self.logger.debug('adapting-monitor: unregister datapath: %016x', datapath.id)
