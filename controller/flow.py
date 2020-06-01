@@ -50,7 +50,7 @@ class FlowStat:
         # Optional fields
         if "flowstat_window_size" in ch.config:
             cls.WINDOW_SIZE = int(ch.config["flowstat_window_size"])
-            logger.debug("config: flowstat_window_size set to {}".format(cls.WINDOW_SIZE))
+            logger.info("config: flowstat_window_size set to {}".format(cls.WINDOW_SIZE))
         else:
             logger.debug("config: flowstat_window_size not set")
 

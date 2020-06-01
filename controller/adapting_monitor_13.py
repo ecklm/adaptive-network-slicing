@@ -89,7 +89,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
         # Optional fields
         if "time_step" in ch.config:
             cls.TIME_STEP = int(ch.config["time_step"])
-            logger.debug("config: time_step set to {}".format(cls.TIME_STEP))
+            logger.info("config: time_step set to {}".format(cls.TIME_STEP))
         else:
             logger.debug("config: time_step not set")
 

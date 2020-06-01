@@ -40,20 +40,20 @@ class QoSManager:
 
         if type(ch.config["ovsdb_addr"]) == str:
             cls.OVSDB_ADDR = ch.config["ovsdb_addr"]
-            logger.debug("config: ovsdb_addr set to {}".format(cls.OVSDB_ADDR))
+            logger.info("config: ovsdb_addr set to {}".format(cls.OVSDB_ADDR))
         else:
             raise TypeError("config: ovsdb_addr must be string")
 
         # Optional fields
         if "limit_step" in ch.config:
             cls.LIMIT_STEP = int(ch.config["limit_step"])
-            logger.debug("config: limit_step set to {}".format(cls.LIMIT_STEP))
+            logger.info("config: limit_step set to {}".format(cls.LIMIT_STEP))
         else:
             logger.debug("config: limit_step not set")
 
         if "interface_max_rate" in ch.config:
             cls.DEFAULT_MAX_RATE = int(ch.config["interface_max_rate"])
-            logger.debug("config: interface_max_rate set to {}".format(cls.DEFAULT_MAX_RATE))
+            logger.info("config: interface_max_rate set to {}".format(cls.DEFAULT_MAX_RATE))
         else:
             logger.debug("config: interface_max_rate not set")
 
