@@ -7,7 +7,21 @@ UE3_IP=10.0.0.13; UE3_PORT=5003
 EXPERIMENT_LENGTH=600 # Number of seconds experiments should last.
 
 function title {
-		echo ========== $1 ==========
+	echo ========== $1 ==========
+}
+
+function project_csv {
+	# Output:
+	# Unix time stamp, Local IP, Local Port, Remote IP, Remote Port, Report interval, Bandwidth (bps)
+	while read line
+	do
+		printf "`date +'%s'`,"
+		echo "$line" | cut -d, -f2-5,7,9
+	done
+}
+
+function iperf_cmd {
+	iperf -u -i 1 --reportstyle C $@ | project_csv
 }
 
 # Record time for both the beginning and the end of each experiment

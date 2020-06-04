@@ -6,5 +6,7 @@ then
 	exit 1
 fi
 
+source `dirname $0`/experiments/common.sh
+
 SERVER_PORT=$1
-iperf -s -u -i 1 -p $SERVER_PORT
+iperf_cmd -s -p $SERVER_PORT

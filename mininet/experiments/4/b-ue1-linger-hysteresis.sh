@@ -14,5 +14,5 @@ do
 	bw=$(( ADAPTATION_POINT + RANDOM % 300 - 150 )) # Kbps in this scenario
 
 	title "${bw}Kbps for $t seconds"
-	iperf -c $UE1_IP -u -b ${bw}K -t $t -p $UE1_PORT
+	iperf_cmd -c $UE1_IP -b ${bw}K -t $t -p $UE1_PORT
 done
