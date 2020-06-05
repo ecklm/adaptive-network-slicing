@@ -17,15 +17,15 @@ class AdaptingMonitor13(app_manager.RyuApp):
     TIME_STEP = 5  # The number of seconds between two stat request
     FLOWS_LIMITS: Dict[FlowId, int] = {}  # Rate limits associated to different flows
     LOG_STAT_SEQUENCE_DELIMITER = "=" * 50
+    STAT_LOG_FORMAT = "human"
 
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)
 
         self.logger = logging.getLogger("adapting_monitor")
 
-        config_file = env.get("CONFIG_FILE")
-        if config_file is None:
-            config_file = "configs/default.yml"
+        config_file = env.get("CONFIG_FILE", "configs/default.yml")
+        self.logger.info("Using %s as config file.", config_file)
         self.configure(config_file)
 
         self.datapaths = {}
@@ -101,6 +101,12 @@ class AdaptingMonitor13(app_manager.RyuApp):
         else:
             logger.debug("time_step not set")
 
+        if "stat_log_format" in ch.config:
+            cls.STAT_LOG_FORMAT = ch.config["stat_log_format"]
+            logger.info("stat_log_format set to {}".format(cls.STAT_LOG_FORMAT))
+        else:
+            logger.debug("stat_log_format not set")
+
         # Configure other classes
         QoSManager.configure(ch)
         FlowStat.configure(ch)
@@ -143,14 +149,6 @@ class AdaptingMonitor13(app_manager.RyuApp):
             # assumes that there is a switch using datapath id = 1 and uses it as the 'period signal'.
             return
 
-        # Print log header
-        self.logger.info("")
-        self.logger.info('%10s %10s %7s %16s %20s %20s' %
-                         ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current limit (Mb/s)',
-                          'initial limit (Mb/s)'))
-        self.logger.info('%s %s %s %s %s %s' %
-                         ('-' * 10, '-' * 10, '-' * 7, '-' * 16, '-' * 20, '-' * 20))
-
         # Collect and order entries
         statentries = []
         for dpid, flowstats in self.stats.items():
@@ -163,9 +161,25 @@ class AdaptingMonitor13(app_manager.RyuApp):
         # Sort by flows first and then by dpid (=switch)
         statentries = sorted(statentries, key=lambda entry: (entry[2:4], entry[0]))
 
-        # Log statistics
-        for entry in statentries:
-            self.logger.info('%10s %10s %7d %16.2f %20.2f %20.2f' % entry[1:])  # [1:] -> without dpid
+        # Print stat log
+        header_fields = ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current limit (Mb/s)',
+                         'initial limit (Mb/s)')
+        if self.__class__.STAT_LOG_FORMAT == "human":
+            # Print log header
+            self.logger.info("")
+            self.logger.info('%10s %10s %7s %16s %20s %20s' % header_fields)
+            self.logger.info('%s %s %s %s %s %s' %
+                             ('-' * 10, '-' * 10, '-' * 7, '-' * 16, '-' * 20, '-' * 20))
+            # Log statistics
+            for entry in statentries:
+                self.logger.info('%10s %10s %7d %16.2f %20.2f %20.2f' % entry[1:])  # [1:] -> without dpid
+        elif self.__class__.STAT_LOG_FORMAT == "csv":
+            self.logger.info(",".join(header_fields))
+            for entry in statentries:
+                entry = [str(field) for field in entry]
+                self.logger.info(",".join(entry[1:]))
+        else:
+            raise ValueError("Invalid STAT_LOG_FORMAT set: %s" % self.__class__.STAT_LOG_FORMAT)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
