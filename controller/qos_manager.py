@@ -261,8 +261,8 @@ class QoSManager:
             return False
 
     def log_http_response(self, r: requests.Response) -> None:
-        if r.status_code >= 300 or \
-                -1 != r.text.find("failure"):
+        self.__logger.debug("Logging HTTP response corresponding to request to %s" % r.request.url)
+        if not self.is_http_response_ok(r):
             log = self.__logger.error
         else:
             log = self.__logger.debug
@@ -271,6 +271,9 @@ class QoSManager:
                                  json.dumps(r.json(), indent=4, sort_keys=True)))
         except ValueError:  # the response is not JSON
             log("{} - {}".format(r.status_code, r.text))
+
+    def is_http_response_ok(self, r: requests.Response) -> bool:
+        return r.status_code < 300 and r.text.find("failure") == -1
 
 
 class ThreadedQoSManager(QoSManager):
