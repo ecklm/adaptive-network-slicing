@@ -101,6 +101,13 @@ class QoSManager:
                                       [{"max_rate": str(limit)} for limit in queue_limits]
                               }))
             self.log_http_response(r)
+            if self.is_http_response_ok(r) is False and r.text.find("ovs_bridge") != -1:
+                delay = 0.1
+                self.__logger.error("Queue setting failure probably due to too early trial. Retrying once in %.2fs."
+                                    % delay)
+                ryu.lib.hub.sleep(delay)
+                r = requests.Session().send(r.request)
+                self.log_http_response(r)
         except requests.exceptions.ConnectionError as err:
             self.__logger.error("Queue setting has failed. {}".format(err))
 
