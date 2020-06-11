@@ -24,4 +24,4 @@ time_step: 2
 # limit_step: 2500000
 # interface_max_rate: 5000000
 # flowstat_window_size: 5
-stat_log_format: csv # options: human, csv
+# stat_log_format: csv # options: human, csv

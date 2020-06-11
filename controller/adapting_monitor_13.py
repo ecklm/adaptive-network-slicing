@@ -17,7 +17,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
     TIME_STEP = 5  # The number of seconds between two stat request
     FLOWS_LIMITS: Dict[FlowId, int] = {}  # Rate limits associated to different flows
     LOG_STAT_SEQUENCE_DELIMITER = "=" * 50
-    STAT_LOG_FORMAT = "human"
+    STAT_LOG_FORMAT = "csv"
 
     def __init__(self, *args, **kwargs):
         super(AdaptingMonitor13, self).__init__(*args, **kwargs)

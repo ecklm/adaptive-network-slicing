@@ -15,4 +15,4 @@ ovsdb_addr: 'tcp:192.0.2.20:6632'
 # limit_step: 2500000
 interface_max_rate: 45000000 # 45Mbps
 # flowstat_window_size: 5
-stat_log_format: csv # options: human, csv
+# stat_log_format: csv # options: human, csv
