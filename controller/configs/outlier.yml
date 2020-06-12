@@ -1,15 +1,17 @@
 ---
+# Configuration to be run with outlier_topo
+
 ## Mandatory values
 flows:
+  # f1: B -> UE1
+  - ipv4_dst: 10.0.0.2
+    udp_dst: 5001
+    base_ratelimit: 5000000 # 5Mbps
+
   - ipv4_dst: 10.0.0.1
-    udp_dst: 5009
-    base_ratelimit: 5000000
-  - ipv4_dst: 10.0.0.8
     udp_dst: 5002
-    base_ratelimit: 15000000
-  - ipv4_dst: 10.0.0.1
-    udp_dst: 5003
-    base_ratelimit: 25000000
+    base_ratelimit: 5800000 # 5.8Mbps
+
 controller_baseurl: 'http://localhost:8080'
 ovsdb_addr: 'tcp:192.0.2.20:6632'
 
@@ -18,4 +20,4 @@ ovsdb_addr: 'tcp:192.0.2.20:6632'
 # limit_step: 2500000
 # interface_max_rate: 5000000
 # flowstat_window_size: 5
-stat_log_format: csv # options: human, csv
+# stat_log_format: csv # options: human, csv

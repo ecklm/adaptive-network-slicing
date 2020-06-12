@@ -101,6 +101,13 @@ class QoSManager:
                                       [{"max_rate": str(limit)} for limit in queue_limits]
                               }))
             self.log_http_response(r)
+            if self.is_http_response_ok(r) is False and r.text.find("ovs_bridge") != -1:
+                delay = 0.1
+                self.__logger.error("Queue setting failure probably due to too early trial. Retrying once in %.2fs."
+                                    % delay)
+                ryu.lib.hub.sleep(delay)
+                r = requests.Session().send(r.request)
+                self.log_http_response(r)
         except requests.exceptions.ConnectionError as err:
             self.__logger.error("Queue setting has failed. {}".format(err))
 
@@ -261,8 +268,8 @@ class QoSManager:
             return False
 
     def log_http_response(self, r: requests.Response) -> None:
-        if r.status_code >= 300 or \
-                -1 != r.text.find("failure"):
+        self.__logger.debug("Logging HTTP response corresponding to request to %s" % r.request.url)
+        if not self.is_http_response_ok(r):
             log = self.__logger.error
         else:
             log = self.__logger.debug
@@ -271,6 +278,9 @@ class QoSManager:
                                  json.dumps(r.json(), indent=4, sort_keys=True)))
         except ValueError:  # the response is not JSON
             log("{} - {}".format(r.status_code, r.text))
+
+    def is_http_response_ok(self, r: requests.Response) -> bool:
+        return r.status_code < 300 and r.text.find("failure") == -1
 
 
 class ThreadedQoSManager(QoSManager):
