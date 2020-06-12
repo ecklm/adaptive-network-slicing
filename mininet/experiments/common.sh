@@ -4,6 +4,7 @@ UE1_IP=10.0.0.11; UE1_PORT=5001
 UE2_IP=10.0.0.12; UE2_PORT=5002
 UE3_IP=10.0.0.13; UE3_PORT=5003
 
+DEFAULT_BW=30 # Mbps
 EXPERIMENT_LENGTH=600 # Number of seconds experiments should last.
 
 function title {

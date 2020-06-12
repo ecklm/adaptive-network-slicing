@@ -21,4 +21,4 @@ case $dst in
 		exit 1
 esac
 
-iperf_cmd -c $IP -b 30M -t $EXPERIMENT_LENGTH -p $PORT
+iperf_cmd -c $IP -b ${DEFAULT_BW}M -t $EXPERIMENT_LENGTH -p $PORT
