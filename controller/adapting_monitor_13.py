@@ -37,6 +37,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
         self.logger.info(self.__class__.LOG_STAT_SEQUENCE_DELIMITER)
         self.threads.append(hub.spawn(self._monitor))
         self.threads.append(hub.spawn(self._adapt))
+        self.threads.append(hub.spawn(self._flow_stats_logger))
 
     def stop(self):
         super().stop()
@@ -142,44 +143,41 @@ class AdaptingMonitor13(app_manager.RyuApp):
         req = parser.OFPFlowStatsRequest(datapath)
         datapath.send_msg(req)
 
-    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
-    def _flow_stats_reply_logger(self, ev):
-        if ev.msg.datapath.id != 1:
-            # This is a hack to achieve that statistic logs only get printed once in a period of updates. This hack
-            # assumes that there is a switch using datapath id = 1 and uses it as the 'period signal'.
-            return
+    def _flow_stats_logger(self):
+        while self.is_active:
+            # Collect and order entries
+            statentries = []
+            for dpid, flowstats in self.stats.items():
+                for flow, avg_speed in flowstats.export_avg_speeds_bps('M').items():
+                    statentries.append((dpid, self.datapaths[dpid].cname,
+                                        flow.ipv4_dst, flow.udp_dst,
+                                        avg_speed,
+                                        self.qos_manager.get_current_limit(flow) / 10 ** 6,
+                                        self.qos_manager.get_initial_limit(flow) / 10 ** 6))
+            # Sort by flows first and then by dpid (=switch)
+            statentries = sorted(statentries, key=lambda entry: (entry[2:4], entry[0]))
 
-        # Collect and order entries
-        statentries = []
-        for dpid, flowstats in self.stats.items():
-            for flow, avg_speed in flowstats.export_avg_speeds_bps('M').items():
-                statentries.append((dpid, self.datapaths[dpid].cname,
-                                    flow.ipv4_dst, flow.udp_dst,
-                                    avg_speed,
-                                    self.qos_manager.get_current_limit(flow) / 10 ** 6,
-                                    self.qos_manager.get_initial_limit(flow) / 10 ** 6))
-        # Sort by flows first and then by dpid (=switch)
-        statentries = sorted(statentries, key=lambda entry: (entry[2:4], entry[0]))
+            # Print stat log
+            header_fields = ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current limit (Mb/s)',
+                             'initial limit (Mb/s)')
+            if self.__class__.STAT_LOG_FORMAT == "human":
+                # Print log header
+                self.logger.info("")
+                self.logger.info('%10s %10s %7s %16s %20s %20s' % header_fields)
+                self.logger.info('%s %s %s %s %s %s' %
+                                 ('-' * 10, '-' * 10, '-' * 7, '-' * 16, '-' * 20, '-' * 20))
+                # Log statistics
+                for entry in statentries:
+                    self.logger.info('%10s %10s %7d %16.2f %20.2f %20.2f' % entry[1:])  # [1:] -> without dpid
+            elif self.__class__.STAT_LOG_FORMAT == "csv":
+                # self.logger.info(",".join(header_fields))
+                for entry in statentries:
+                    entry = [str(field) for field in entry]
+                    self.logger.info(",".join(entry[1:]))
+            else:
+                raise ValueError("Invalid STAT_LOG_FORMAT set: %s" % self.__class__.STAT_LOG_FORMAT)
 
-        # Print stat log
-        header_fields = ('datapath', 'ipv4-dst', 'udp-dst', 'avg-speed (Mb/s)', 'current limit (Mb/s)',
-                         'initial limit (Mb/s)')
-        if self.__class__.STAT_LOG_FORMAT == "human":
-            # Print log header
-            self.logger.info("")
-            self.logger.info('%10s %10s %7s %16s %20s %20s' % header_fields)
-            self.logger.info('%s %s %s %s %s %s' %
-                             ('-' * 10, '-' * 10, '-' * 7, '-' * 16, '-' * 20, '-' * 20))
-            # Log statistics
-            for entry in statentries:
-                self.logger.info('%10s %10s %7d %16.2f %20.2f %20.2f' % entry[1:])  # [1:] -> without dpid
-        elif self.__class__.STAT_LOG_FORMAT == "csv":
-            # self.logger.info(",".join(header_fields))
-            for entry in statentries:
-                entry = [str(field) for field in entry]
-                self.logger.info(",".join(entry[1:]))
-        else:
-            raise ValueError("Invalid STAT_LOG_FORMAT set: %s" % self.__class__.STAT_LOG_FORMAT)
+            hub.sleep(1)
 
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
     def _flow_stats_reply_handler(self, ev):
