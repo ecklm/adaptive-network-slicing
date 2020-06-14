@@ -174,7 +174,7 @@ class AdaptingMonitor13(app_manager.RyuApp):
             for entry in statentries:
                 self.logger.info('%10s %10s %7d %16.2f %20.2f %20.2f' % entry[1:])  # [1:] -> without dpid
         elif self.__class__.STAT_LOG_FORMAT == "csv":
-            self.logger.info(",".join(header_fields))
+            # self.logger.info(",".join(header_fields))
             for entry in statentries:
                 entry = [str(field) for field in entry]
                 self.logger.info(",".join(entry[1:]))
