@@ -5,7 +5,7 @@ flows:
   # mandatory at the moment.
   - ipv4_dst: 10.0.0.254
     udp_dst: 9999
-    base_ratelimit: 1 # 5Mbps
+    base_ratelimit: 1
 
 controller_baseurl: 'http://localhost:8080'
 ovsdb_addr: 'tcp:192.0.2.20:6632'

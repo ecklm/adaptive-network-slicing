@@ -6,12 +6,12 @@ source `dirname $0`/../common.sh
 # maximum bandwidth is 5Mbps and where adaptation only happens on crossing half
 # the bandwidth.
 
-ADAPTATION_POINT=2500
+ADAPTATION_POINT=1250
 t=$(( EXPERIMENT_LENGTH/6 ))
 
 for i in {1..6}
 do
-	bw=$(( ADAPTATION_POINT + RANDOM % 300 - 150 )) # Kbps in this scenario
+	bw=$(( ADAPTATION_POINT + RANDOM % 1000 - 500 )) # Kbps in this scenario
 
 	title "${bw}Kbps for $t seconds"
 	iperf_cmd -c $UE1_IP -b ${bw}K -t $t -p $UE1_PORT

@@ -101,6 +101,7 @@ class QoSManager:
                                       [{"max_rate": str(limit)} for limit in queue_limits]
                               }))
             self.log_http_response(r)
+            r2 = r
             if self.is_http_response_ok(r) is False and r.text.find("ovs_bridge") != -1:
                 delay = 0.1
                 self.__logger.error("Queue setting failed on %s probably due to early trial. Retrying once in %.2fs."

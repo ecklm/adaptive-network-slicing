@@ -5,7 +5,7 @@ UE2_IP=10.0.0.12; UE2_PORT=5002
 UE3_IP=10.0.0.13; UE3_PORT=5003
 
 DEFAULT_BW=40 # Mbps
-EXPERIMENT_LENGTH=600 # Number of seconds experiments should last.
+EXPERIMENT_LENGTH=360 # Number of seconds experiments should last.
 
 function title {
 	echo ========== $1 ==========
